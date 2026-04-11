@@ -29,7 +29,6 @@
     "@types/lru-cache": "7.6.1",
     "@types/node": "16.11.6",
     "@types/react-dom": "18.2.6",
-    "@types/which": "2.0.1",
     "@typescript-eslint/eslint-plugin": "5.2.0",
     "@typescript-eslint/parser": "5.2.0",
     "babel-jest": "27.5.1",
@@ -44,6 +43,7 @@
     "xml-js": "1.6.11"
   },
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.3.0",
     "citeproc": "2.4.63",
     "download": "8.0.0",
     "execa": "6.1.0",

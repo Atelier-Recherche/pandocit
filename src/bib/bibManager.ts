@@ -28,8 +28,7 @@ import { cite } from 'src/parser/citeproc';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
-import path from 'path';
-import { FSWatcher, watch, existsSync } from 'fs';
+import { getPath, getFs, isDesktop } from 'src/platformAdapter';
 
 const fuseSettings = {
   includeMatches: true,
@@ -88,9 +87,11 @@ function getScopedSettings(file: TFile): ScopedSettings {
     return null;
   }
 
-  // Checks whether the bibliography is a relative path and replaces the path with an absolute one
-  if (existsSync(path.join(getVaultRoot(), path.dirname(file.path), output.bibliography))){
-    output.bibliography = path.join(getVaultRoot(), path.dirname(file.path), output.bibliography);
+  const pathApi = getPath();
+  const fsApi = getFs();
+  const root = getVaultRoot();
+  if (root && output.bibliography && fsApi.existsSync(pathApi.join(root, pathApi.dirname(file.path), output.bibliography))) {
+    output.bibliography = pathApi.join(root, pathApi.dirname(file.path), output.bibliography);
   }
 
   return output;
@@ -147,7 +148,7 @@ export class BibManager {
   zCitekeyToLinks: Map<string, string> = new Map();
   zCitekeyToPDFLinks: Map<string, string[]> = new Map();
 
-  watcherCache: Map<string, FSWatcher> = new Map();
+  watcherCache: Map<string, { close: () => void }> = new Map();
 
   constructor(plugin: ReferenceList) {
     this.plugin = plugin;
@@ -261,11 +262,7 @@ export class BibManager {
 
     if (settings.bibliography) {
       try {
-        const bib = await bibToCSL(
-          settings.bibliography,
-          this.plugin.settings.pathToPandoc,
-          getVaultRoot
-        );
+        const bib = await bibToCSL(settings.bibliography, getVaultRoot);
         bibCache = new Map();
 
         for (const entry of bib) {
@@ -304,23 +301,20 @@ export class BibManager {
 
     if (!settings.pathToBibliography) return;
     if (!fromCache || this.bibCache.size === 0) {
-      const bib = await bibToCSL(
-        settings.pathToBibliography,
-        settings.pathToPandoc,
-        getVaultRoot
-      );
+      const bib = await bibToCSL(settings.pathToBibliography, getVaultRoot);
 
       this.bibCache = new Map();
       const bibPath = getBibPath(settings.pathToBibliography, getVaultRoot);
 
-      if (bibPath && !this.watcherCache.has(bibPath)) {
+      if (isDesktop() && bibPath && !this.watcherCache.has(bibPath)) {
+        const fsApi = getFs();
         let dbTimer = 0;
         this.watcherCache.set(
           bibPath,
-          watch(bibPath, (evt) => {
+          fsApi.watch(bibPath, (evt) => {
             if (evt === 'change') {
               clearTimeout(dbTimer);
-              dbTimer = activeWindow.setTimeout(() => {
+              dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
                 this.loadGlobalBibFile().then(() => {
                   this.fileCache.clear();
                   this.plugin.processReferences();
@@ -639,16 +633,17 @@ export class BibManager {
         ? cachedDoc.source
         : await this.loadScopedEngine(settings);
 
-    if (settings?.bibliography) {
+    if (isDesktop() && settings?.bibliography) {
       const bibPath = getBibPath(settings.bibliography, getVaultRoot);
       if (!this.watcherCache.has(bibPath)) {
+        const fsApi = getFs();
         let dbTimer = 0;
         this.watcherCache.set(
           bibPath,
-          watch(bibPath, (evt) => {
+          fsApi.watch(bibPath, (evt) => {
             if (evt === 'change') {
               clearTimeout(dbTimer);
-              dbTimer = activeWindow.setTimeout(() => {
+              dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
                 this.fileCache.delete(file);
                 this.plugin.processReferences();
               }, 100);
@@ -877,7 +872,7 @@ export class BibManager {
             zPDFLinks.forEach((link) => {
               div.createDiv('clickable-icon', (div) => {
                 setIcon(div, 'lucide-file-text');
-                div.setAttr('aria-label', path.parse(link).base);
+                div.setAttr('aria-label', getPath().parse(link).base);
                 div.onClickEvent(() => {
                   activeWindow.open(`file://${encodeURI(link)}`, '_blank');
                 });

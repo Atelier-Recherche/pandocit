@@ -1,5 +1,10 @@
-import { Notice, PluginSettingTab, Setting, TextComponent } from 'obsidian';
-import which from 'which';
+import {
+  Notice,
+  Platform,
+  PluginSettingTab,
+  Setting,
+  TextComponent,
+} from 'obsidian';
 
 import { t } from './lang/helpers';
 import ReferenceList from './main';
@@ -18,7 +23,6 @@ import { langListRaw } from './bib/cslLangList';
 import { ZoteroPullSetting } from './settings/ZoteroPullSetting';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
-  pathToPandoc: '',
   tooltipDelay: 400,
   zoteroGroups: [],
   renderCitations: true,
@@ -33,7 +37,6 @@ export interface ZoteroGroup {
 }
 
 export interface ReferenceListSettings {
-  pathToPandoc: string;
   pathToBibliography?: string;
 
   cslStyleURL?: string;
@@ -67,54 +70,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName(t('Fallback path to Pandoc'))
-      .setDesc(
-        t(
-          "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows."
-        )
-      )
-      .then((setting) => {
-        let input: TextComponent;
-        setting.addText((text) => {
-          input = text;
-          text.setValue(this.plugin.settings.pathToPandoc).onChange((value) => {
-            this.plugin.settings.pathToPandoc = value;
-            this.plugin.saveSettings();
-          });
-        });
-
-        setting.addExtraButton((b) => {
-          b.setIcon('magnifying-glass');
-          b.setTooltip(t('Attempt to find Pandoc automatically'));
-          b.onClick(() => {
-            which('pandoc')
-              .then((pathToPandoc) => {
-                if (pathToPandoc) {
-                  input.setValue(pathToPandoc);
-
-                  this.plugin.settings.pathToPandoc = pathToPandoc;
-                  this.plugin.saveSettings();
-                } else {
-                  new Notice(
-                    t(
-                      'Unable to find pandoc on your system. If it is installed, please manually enter a path.'
-                    )
-                  );
-                }
-              })
-              .catch((e) => {
-                new Notice(
-                  t(
-                    'Unable to find pandoc on your system. If it is installed, please manually enter a path.'
-                  )
-                );
-                console.error(e);
-              });
-          });
-        });
-      });
-
-    new Setting(containerEl)
       .setName(t('Path to bibliography file'))
       .setDesc(
         t(
@@ -141,9 +96,21 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           b.setIcon('folder');
           b.setTooltip(t('Select a bibliography file.'));
           b.onClick(() => {
-            const path = require('electron').remote.dialog.showOpenDialogSync({
-              properties: ['openFile'],
-            });
+            if (!Platform.isDesktop) {
+              new Notice(
+                t(
+                  'File selection is only available on desktop. Please enter the path manually.'
+                )
+              );
+              return;
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const path = require('electron').remote.dialog.showOpenDialogSync(
+              {
+                properties: ['openFile'],
+              }
+            );
 
             if (path && path.length) {
               input.setValue(path[0]);
@@ -211,9 +178,21 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           b.setIcon('folder');
           b.setTooltip(t('Select a CSL file located on your computer'));
           b.onClick(() => {
-            const path = require('electron').remote.dialog.showOpenDialogSync({
-              properties: ['openFile'],
-            });
+            if (!Platform.isDesktop) {
+              new Notice(
+                t(
+                  'File selection is only available on desktop. Please enter the path manually.'
+                )
+              );
+              return;
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const path = require('electron').remote.dialog.showOpenDialogSync(
+              {
+                properties: ['openFile'],
+              }
+            );
 
             if (path && path.length) {
               input.setValue(path[0]);

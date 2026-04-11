@@ -1,73 +1,102 @@
-import { execa } from 'execa';
-import fs from 'fs';
-import path from 'path';
-import https from 'https';
-import download from 'download';
-import { request } from 'http';
 import { CSLList, PartialCSLEntry } from './types';
+import { pandocConvertToCslJson } from '../pandocWasm';
+import { getPath, getFs, getHttps, isDesktop } from '../platformAdapter';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
 function ensureDir(dir: string) {
+  const fs = getFs();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 
 export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
-  if (!fs.existsSync(bibPath)) {
-    const orig = bibPath;
-    if (getVaultRoot) {
-      bibPath = path.join(getVaultRoot(), bibPath);
-      if (!fs.existsSync(bibPath)) {
-        throw new Error(`bibToCSL: cannot access bibliography file '${bibPath}'.`);
-      }
-    } else {
-      throw new Error(`bibToCSL: cannot access bibliography file '${orig}'.`);
-    }
+  const path = getPath();
+  const fs = getFs();
+
+  if (fs.existsSync(bibPath)) {
+    return bibPath;
   }
 
-  return bibPath;
+  const orig = bibPath;
+  if (getVaultRoot) {
+    const root = getVaultRoot();
+    const abs = path.isAbsolute(bibPath) ? bibPath : path.join(root, bibPath);
+    if (isDesktop() && !fs.existsSync(abs)) {
+      throw new Error(`bibToCSL: cannot access bibliography file '${abs}'.`);
+    }
+    return abs;
+  }
+
+  if (isDesktop()) {
+    throw new Error(`bibToCSL: cannot access bibliography file '${orig}'.`);
+  }
+  return orig;
+}
+
+async function readBibliographyFile(
+  bibPath: string,
+  getVaultRoot?: () => string
+): Promise<string> {
+  const path = getPath();
+  const resolved = getBibPath(bibPath, getVaultRoot);
+
+  try {
+    const anyApp = app as any;
+    if (anyApp?.vault?.adapter?.read && getVaultRoot) {
+      const root = getVaultRoot();
+      const norm = root ? resolved.replace(/\\/g, '/').replace(root.replace(/\\/g, '/'), '').replace(/^\//, '') : resolved.replace(/\\/g, '/');
+      if (!root || resolved.startsWith(root) || !path.isAbsolute(resolved)) {
+        const rel = root && resolved.startsWith(root)
+          ? resolved.slice(root.length).replace(/^[\\/]/, '')
+          : resolved.replace(/^[\\/]+/, '');
+        const data = await anyApp.vault.adapter.read(rel);
+        if (typeof data === 'string') return data;
+      }
+    }
+  } catch {
+    // fallback to fs on desktop
+  }
+
+  if (!isDesktop()) {
+    throw new Error(`bibToCSL: cannot read file on mobile (path: ${resolved}). Use a path relative to the vault.`);
+  }
+
+  const fs = getFs();
+  return await new Promise<string>((res, rej) => {
+    fs.readFile(resolved, (err, data) => {
+      if (err) return rej(err);
+      res(data.toString());
+    });
+  });
 }
 
 export async function bibToCSL(
   bibPath: string,
-  pathToPandoc: string,
   getVaultRoot?: () => string
 ): Promise<PartialCSLEntry[]> {
-  bibPath = getBibPath(bibPath, getVaultRoot);
+  const path = getPath();
+  const resolvedPath = getBibPath(bibPath, getVaultRoot);
 
-  const parsed = path.parse(bibPath);
+  const parsed = path.parse(resolvedPath);
   if (parsed.ext === '.json') {
-    return new Promise((res, rej) => {
-      fs.readFile(bibPath, (err, data) => {
-        if (err) return rej(err);
-        try {
-          res(JSON.parse(data.toString()));
-        } catch (e) {
-          rej(e);
-        }
-      });
-    });
+    const contents = await readBibliographyFile(resolvedPath, getVaultRoot);
+    return JSON.parse(contents);
   }
 
-  if (!pathToPandoc) {
-    throw new Error('bibToCSL: path to pandoc is required for non CSL files.');
-  }
+  const contents = await readBibliographyFile(resolvedPath, getVaultRoot);
+  const virtualName = `input${parsed.ext || '.bib'}`;
 
-  if (!fs.existsSync(pathToPandoc)) {
-    throw new Error(`bibToCSL: cannot access pandoc at '${pathToPandoc}'.`);
-  }
+  const stdout = await pandocConvertToCslJson(virtualName, contents);
 
-  const args = [bibPath, '-t', 'csljson', '--quiet'];
+  return JSON.parse(stdout);
+}
 
-  const res = await execa(pathToPandoc, args);
-
-  if (res.stderr) {
-    throw new Error(`bibToCSL: ${res.stderr}`);
-  }
-
-  return JSON.parse(res.stdout);
+async function fetchUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+  return res.text();
 }
 
 export async function getCSLLocale(
@@ -80,36 +109,37 @@ export async function getCSLLocale(
   }
 
   const url = `https://raw.githubusercontent.com/citation-style-language/locales/master/locales-${lang}.xml`;
+  const path = getPath();
+  const fs = getFs();
   const outpath = path.join(cacheDir, `locales-${lang}.xml`);
 
-  ensureDir(cacheDir);
-  if (fs.existsSync(outpath)) {
-    const localeData = fs.readFileSync(outpath).toString();
-    localeCache.set(lang, localeData);
-    return localeData;
+  if (isDesktop()) {
+    ensureDir(cacheDir);
+    if (fs.existsSync(outpath)) {
+      const localeData = fs.readFileSync(outpath).toString();
+      localeCache.set(lang, localeData);
+      return localeData;
+    }
   }
 
-  const str = await new Promise<string>((res, rej) => {
-    https.get(url, (result) => {
-      let output = '';
+  const str = isDesktop() && getHttps()
+    ? await new Promise<string>((res, rej) => {
+        getHttps().get(url, (result: any) => {
+          let output = '';
+          result.setEncoding('utf8');
+          result.on('data', (chunk: string) => (output += chunk));
+          result.on('error', (e: Error) => rej(`Downloading locale: ${e}`));
+          result.on('end', () => {
+            if (/^404: Not Found/.test(output)) rej(new Error('Error downloading locale: 404'));
+            else res(output);
+          });
+        });
+      })
+    : await fetchUrl(url);
 
-      result.setEncoding('utf8');
-      result.on('data', (chunk) => (output += chunk));
-      result.on('error', (e) => rej(`Downloading locale: ${e}`));
-      result.on('close', () => {
-        rej(new Error('Error: cannot download locale'));
-      });
-      result.on('end', () => {
-        if (/^404: Not Found/.test(output)) {
-          rej(new Error('Error downloading locale: 404: Not Found'));
-        } else {
-          res(output);
-        }
-      });
-    });
-  });
-
-  fs.writeFileSync(outpath, str);
+  if (isDesktop()) {
+    fs.writeFileSync(outpath, str);
+  }
   localeCache.set(lang, str);
   return str;
 }
@@ -120,20 +150,38 @@ export async function getCSLStyle(
   url: string,
   explicitPath?: string
 ) {
+  const path = getPath();
+  const fs = getFs();
+
   if (explicitPath) {
     if (styleCache.has(explicitPath)) {
       return styleCache.get(explicitPath);
     }
 
-    if (!fs.existsSync(explicitPath)) {
+    if (isDesktop() && !fs.existsSync(explicitPath)) {
       throw new Error(
         `Error: retrieving citation style; Cannot find file '${explicitPath}'.`
       );
     }
 
-    const styleData = fs.readFileSync(explicitPath).toString();
-    styleCache.set(explicitPath, styleData);
-    return styleData;
+    if (isDesktop()) {
+      const styleData = fs.readFileSync(explicitPath).toString();
+      styleCache.set(explicitPath, styleData);
+      return styleData;
+    }
+
+    try {
+      const anyApp = app as any;
+      if (anyApp?.vault?.adapter?.read) {
+        const data = await anyApp.vault.adapter.read(explicitPath.replace(/^[\\/]+/, ''));
+        if (typeof data === 'string') {
+          styleCache.set(explicitPath, data);
+          return data;
+        }
+      }
+    } catch (e) {
+      throw new Error(`Error: cannot read style file '${explicitPath}'.`);
+    }
   }
 
   if (styleCache.has(url)) {
@@ -143,34 +191,30 @@ export async function getCSLStyle(
   const fileFromURL = url.split('/').pop();
   const outpath = path.join(cacheDir, fileFromURL);
 
-  ensureDir(cacheDir);
-  if (fs.existsSync(outpath)) {
-    const styleData = fs.readFileSync(outpath).toString();
-    styleCache.set(url, styleData);
-    return styleData;
+  if (isDesktop()) {
+    ensureDir(cacheDir);
+    if (fs.existsSync(outpath)) {
+      const styleData = fs.readFileSync(outpath).toString();
+      styleCache.set(url, styleData);
+      return styleData;
+    }
   }
 
-  const str = await new Promise<string>((res, rej) => {
-    https.get(url, (result) => {
-      let output = '';
+  const str = isDesktop() && getHttps()
+    ? await new Promise<string>((res, rej) => {
+        getHttps().get(url, (result: any) => {
+          let output = '';
+          result.setEncoding('utf8');
+          result.on('data', (chunk: string) => (output += chunk));
+          result.on('error', (e: Error) => rej(`Error downloading CSL: ${e}`));
+          result.on('end', () => res(output));
+        });
+      })
+    : await fetchUrl(url);
 
-      result.setEncoding('utf8');
-      result.on('data', (chunk) => (output += chunk));
-      result.on('error', (e) => rej(`Error downloading CSL: ${e}`));
-      result.on('close', () => {
-        rej(new Error('Error: cannot download CSL'));
-      });
-      result.on('end', () => {
-        try {
-          res(output);
-        } catch (e) {
-          rej(e);
-        }
-      });
-    });
-  });
-
-  fs.writeFileSync(outpath, str);
+  if (isDesktop()) {
+    fs.writeFileSync(outpath, str);
+  }
   styleCache.set(url, str);
   return str;
 }
@@ -183,16 +227,18 @@ export const defaultHeaders = {
 };
 
 function getGlobal() {
-  if (window?.activeWindow) return activeWindow;
-  if (window) return window;
-  return global;
+  if (typeof window !== 'undefined' && (window as any).activeWindow) return (window as any).activeWindow;
+  if (typeof window !== 'undefined') return window;
+  return typeof global !== 'undefined' ? global : ({} as any);
 }
 
 export async function getZUserGroups(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<Array<{ id: number; name: string }>> {
+  if (!isDesktop()) return null;
   if (!(await isZoteroRunning(port))) return null;
 
+  const request = require('http').request;
   return new Promise((res, rej) => {
     const body = JSON.stringify({
       jsonrpc: '2.0',
@@ -210,15 +256,11 @@ export async function getZUserGroups(
           'Content-Length': Buffer.byteLength(body),
         },
       },
-      (result) => {
+      (result: any) => {
         let output = '';
-
         result.setEncoding('utf8');
-        result.on('data', (chunk) => (output += chunk));
-        result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('close', () => {
-          rej(new Error('Error: cannot connect to Zotero'));
-        });
+        result.on('data', (chunk: string) => (output += chunk));
+        result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
         result.on('end', () => {
           try {
             res(JSON.parse(output).result);
@@ -228,7 +270,6 @@ export async function getZUserGroups(
         });
       }
     );
-
     postRequest.write(body);
     postRequest.end();
   });
@@ -253,8 +294,10 @@ export async function getZModified(
   groupId: number,
   since: number
 ): Promise<CSLList> {
+  if (!isDesktop()) return null;
   if (!(await isZoteroRunning(port))) return null;
 
+  const request = require('http').request;
   return new Promise((res, rej) => {
     const body = JSON.stringify({
       jsonrpc: '2.0',
@@ -273,15 +316,11 @@ export async function getZModified(
           'Content-Length': Buffer.byteLength(body),
         },
       },
-      (result) => {
+      (result: any) => {
         let output = '';
-
         result.setEncoding('utf8');
-        result.on('data', (chunk) => (output += chunk));
-        result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('close', () => {
-          rej(new Error('Error: cannot connect to Zotero'));
-        });
+        result.on('data', (chunk: string) => (output += chunk));
+        result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
         result.on('end', () => {
           try {
             res(JSON.parse(output).result);
@@ -291,7 +330,6 @@ export async function getZModified(
         });
       }
     );
-
     postRequest.write(body);
     postRequest.end();
   });
@@ -310,6 +348,10 @@ export async function getZBib(
   groupId: number,
   loadCached?: boolean
 ) {
+  if (!isDesktop()) return null;
+
+  const path = getPath();
+  const fs = getFs();
   const isRunning = await isZoteroRunning(port);
   const cached = path.join(cacheDir, `zotero-library-${groupId}.json`);
 
@@ -326,10 +368,10 @@ export async function getZBib(
     }
   }
 
+  const download = require('download');
   const bib = await download(
     `http://127.0.0.1:${port}/better-bibtex/export/library?/${groupId}/library.json`
   );
-
   const str = bib.toString();
 
   fs.writeFileSync(cached, str);
@@ -343,21 +385,17 @@ export async function refreshZBib(
   groupId: number,
   since: number
 ) {
-  if (!(await isZoteroRunning(port))) {
-    return null;
-  }
+  if (!isDesktop()) return null;
+  if (!(await isZoteroRunning(port))) return null;
 
+  const path = getPath();
+  const fs = getFs();
   const cached = path.join(cacheDir, `zotero-library-${groupId}.json`);
   ensureDir(cacheDir);
-  if (!fs.existsSync(cached)) {
-    return null;
-  }
+  if (!fs.existsSync(cached)) return null;
 
   const mList = (await getZModified(port, groupId, since)) as CSLList;
-
-  if (!mList?.length) {
-    return null;
-  }
+  if (!mList?.length) return null;
 
   const modified: Map<string, PartialCSLEntry> = new Map();
   const newKeys: Set<string> = new Set();
@@ -392,6 +430,9 @@ export async function refreshZBib(
 }
 
 export async function isZoteroRunning(port: string = DEFAULT_ZOTERO_PORT) {
+  if (!isDesktop()) return false;
+
+  const download = require('download');
   const p = download(`http://127.0.0.1:${port}/better-bibtex/cayw?probe=true`);
   const res = await Promise.race([
     p,
@@ -411,8 +452,10 @@ export async function getItemJSONFromCiteKeys(
   citeKeys: string[],
   libraryID: number
 ) {
+  if (!isDesktop()) return null;
   if (!(await isZoteroRunning(port))) return null;
 
+  const request = require('http').request;
   let res: any;
   try {
     res = await new Promise((res, rej) => {
@@ -433,15 +476,11 @@ export async function getItemJSONFromCiteKeys(
             'Content-Length': Buffer.byteLength(body),
           },
         },
-        (result) => {
+        (result: any) => {
           let output = '';
-
           result.setEncoding('utf8');
-          result.on('data', (chunk) => (output += chunk));
-          result.on('error', (e) => rej(`Error connecting to Zotero: ${e}`));
-          result.on('close', () => {
-            rej(new Error('Error: cannot connect to Zotero'));
-          });
+          result.on('data', (chunk: string) => (output += chunk));
+          result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
           result.on('end', () => {
             try {
               res(JSON.parse(output));

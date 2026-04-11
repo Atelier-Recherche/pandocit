@@ -7,7 +7,6 @@ import {
   debounce,
   setIcon,
 } from 'obsidian';
-import which from 'which';
 
 import {
   citeKeyCacheField,
@@ -24,8 +23,8 @@ import {
 } from './settings';
 import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
-import { PromiseCapability, fixPath, getVaultRoot } from './helpers';
-import path from 'path';
+import { PromiseCapability, getVaultRoot } from './helpers';
+import { getPath } from './platformAdapter';
 import { BibManager } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { isZoteroRunning } from './bib/helpers';
@@ -55,7 +54,7 @@ export default class ReferenceList extends Plugin {
       (leaf: WorkspaceLeaf) => new ReferenceListView(leaf, this)
     );
 
-    this.cacheDir = path.join(getVaultRoot(), '.pandoc');
+    this.cacheDir = getPath().join(getVaultRoot(), '.pandoc');
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
     this.initPromise.promise
@@ -79,22 +78,8 @@ export default class ReferenceList extends Plugin {
       editorTooltipHandler(this.tooltipManager),
     ]);
 
-    // No need to block execution
-    fixPath().then(async () => {
-      if (!this.settings.pathToPandoc) {
-        try {
-          // Attempt to find if/where pandoc is located on the user's machine
-          const pathToPandoc = await which('pandoc');
-          this.settings.pathToPandoc = pathToPandoc;
-          this.saveSettings();
-        } catch {
-          // We can ignore any errors here
-        }
-      }
-
-      this.initPromise.resolve();
-      this.app.workspace.trigger('parse-style-settings');
-    });
+    this.initPromise.resolve();
+    this.app.workspace.trigger('parse-style-settings');
 
     this.addCommand({
       id: 'focus-reference-list-view',
@@ -263,7 +248,15 @@ export default class ReferenceList extends Plugin {
   get view() {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (!leaves?.length) return null;
-    return leaves[0].view as ReferenceListView;
+    const maybeView = leaves[0].view;
+    if (
+      maybeView &&
+      typeof (maybeView as any).setViewContent === 'function' &&
+      typeof (maybeView as any).setMessage === 'function'
+    ) {
+      return maybeView as ReferenceListView;
+    }
+    return null;
   }
 
   async initLeaf() {
@@ -323,7 +316,8 @@ export default class ReferenceList extends Plugin {
   );
 
   processReferences = async () => {
-    const { settings, view } = this;
+    const { settings } = this;
+    const view = this.view;
     if (!settings.pathToBibliography && !settings.pullFromZotero) {
       return view?.setMessage(
         t(
@@ -342,6 +336,8 @@ export default class ReferenceList extends Plugin {
         );
         const cache = this.bibManager.fileCache.get(activeView.file);
 
+        const currentView = this.view;
+
         if (
           !bib &&
           cache?.source === this.bibManager &&
@@ -349,12 +345,23 @@ export default class ReferenceList extends Plugin {
           !(await isZoteroRunning(settings.zoteroPort)) &&
           this.bibManager.fileCache.get(activeView.file)?.keys.size
         ) {
-          view?.setMessage(t('Cannot connect to Zotero'));
+          currentView?.setMessage(t('Cannot connect to Zotero'));
         } else {
-          view?.setViewContent(bib);
+          currentView?.setViewContent(bib);
         }
       } catch (e) {
         console.error(e);
+        if (
+          e instanceof Error &&
+          e.message &&
+          e.message.toLowerCase().includes('pandoc.wasm')
+        ) {
+          view?.setMessage(
+            t(
+              'Unable to load pandoc.wasm; reference list is disabled on this platform.'
+            )
+          );
+        }
       }
     } else {
       view?.setNoContentMessage();

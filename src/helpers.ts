@@ -1,16 +1,34 @@
-import { FileSystemAdapter, htmlToMarkdown } from 'obsidian';
-import { shellPath } from 'shell-path';
+import { FileSystemAdapter, Platform, htmlToMarkdown } from 'obsidian';
 
-export function getVaultRoot() {
-  // This is a desktop only plugin, so assume adapter is FileSystemAdapter
-  return (app.vault.adapter as FileSystemAdapter).getBasePath();
+export function getVaultRoot(): string {
+  if (!Platform.isDesktop) return '';
+  try {
+    return (app.vault.adapter as FileSystemAdapter).getBasePath();
+  } catch {
+    return '';
+  }
 }
 
 export function copyElToClipboard(el: HTMLElement) {
-  require('electron').clipboard.write({
-    html: el.outerHTML,
-    text: htmlToMarkdown(el.outerHTML),
-  });
+  const html = el.outerHTML;
+  const text = htmlToMarkdown(el.outerHTML);
+
+  if (Platform.isDesktop) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { clipboard } = require('electron');
+      clipboard.write({ html, text });
+      return;
+    } catch (e) {
+      console.error('Failed to access electron clipboard', e);
+    }
+  }
+
+  if (navigator?.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch((e) => {
+      console.error('Failed to write to clipboard', e);
+    });
+  }
 }
 
 export class PromiseCapability<T> {
@@ -31,27 +49,6 @@ export class PromiseCapability<T> {
         this.settled = true;
       };
     });
-  }
-}
-
-export async function fixPath() {
-  if (process.platform === 'win32') {
-    return;
-  }
-
-  try {
-    const path = await shellPath();
-
-    process.env.PATH =
-      path ||
-      [
-        './node_modules/.bin',
-        '/.nodebrew/current/bin',
-        '/usr/local/bin',
-        process.env.PATH,
-      ].join(':');
-  } catch (e) {
-    console.error(e);
   }
 }
 
