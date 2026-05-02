@@ -15,7 +15,7 @@ import {
   bibManagerField,
   editorTooltipHandler,
 } from './editorExtension';
-import { t } from './lang/helpers';
+import { setPluginUiLocale, t } from './lang/helpers';
 import { processCiteKeys } from './markdownPostprocessor';
 import {
   DEFAULT_SETTINGS,
@@ -381,7 +381,18 @@ export default class ReferenceList extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = await this.loadData();
+    const merged = Object.assign({}, DEFAULT_SETTINGS, loaded) as ReferenceListSettings;
+    const raw = loaded as { zoteroApiMergeGroupId?: number };
+    if (
+      (!merged.zoteroApiMergeGroupIds || merged.zoteroApiMergeGroupIds.length === 0) &&
+      raw.zoteroApiMergeGroupId != null &&
+      Number.isFinite(Number(raw.zoteroApiMergeGroupId))
+    ) {
+      merged.zoteroApiMergeGroupIds = [Number(raw.zoteroApiMergeGroupId)];
+    }
+    this.settings = merged;
+    setPluginUiLocale(this.settings.pluginUiLocale);
   }
 
   async saveSettings(cb?: () => void) {

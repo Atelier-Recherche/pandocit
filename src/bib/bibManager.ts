@@ -29,7 +29,11 @@ import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
 import { getPath, getFs, isDesktop } from 'src/platformAdapter';
-import { getLinkedFilePathFromAttachmentData } from 'src/zoteroApi/attachmentLinks';
+import {
+  getLinkedFilePathFromAttachmentData,
+  normalizeWebHref,
+} from 'src/zoteroApi/attachmentLinks';
+import { zoteroUriForStorageKey } from 'src/zoteroApi/zoteroMerge';
 import { zoteroItemToCsl } from 'src/zoteroApi/zoteroToCsl';
 
 const fuseSettings = {
@@ -149,6 +153,8 @@ export class BibManager {
 
   zCitekeyToLinks: Map<string, string> = new Map();
   zCitekeyToPDFLinks: Map<string, string[]> = new Map();
+  /** Liens http(s) sur pièces jointes `linked_url` — infobulles / actions rapides */
+  zCitekeyToWebLinks: Map<string, string[]> = new Map();
 
   watcherCache: Map<string, { close: () => void }> = new Map();
 
@@ -380,11 +386,7 @@ export class BibManager {
     const bib: PartialCSLEntry[] = [];
     this.zCitekeyToLinks.clear();
     this.zCitekeyToPDFLinks.clear();
-
-    const libId =
-      settings.zoteroApiLibraryType === 'group'
-        ? settings.zoteroApiGroupId
-        : settings.zoteroApiUserId;
+    this.zCitekeyToWebLinks.clear();
 
     this.bibCache = new Map();
 
@@ -395,9 +397,9 @@ export class BibManager {
         this.bibCache.set(csl.id, csl);
         if (st.key !== csl.id) this.bibCache.set(st.key, csl);
       }
-      if (libId != null) {
+      const link = zoteroUriForStorageKey(st.key, settings);
+      if (link) {
         const resolvedCk = csl?.id ?? st.key;
-        const link = `zotero://select/items/@${libId}_${st.key}`;
         this.zCitekeyToLinks.set(resolvedCk, link);
         if (csl && st.key !== csl.id) this.zCitekeyToLinks.set(st.key, link);
       }
@@ -410,28 +412,44 @@ export class BibManager {
         typeof d.parentItem === 'string' ? d.parentItem.trim() : '';
       if (!parentKey) continue;
 
-      const mime = String(d.contentType ?? '');
-      const fn = String(d.filename ?? '');
-      const isPdf =
-        mime.toLowerCase().includes('pdf') || /\.pdf(\b|$)/i.test(fn);
-      if (!isPdf) continue;
-
-      const local = getLinkedFilePathFromAttachmentData(d);
-      if (!local) continue;
-
       const parentSt = snap.items[parentKey];
       if (!parentSt) continue;
 
       const csl = zoteroItemToCsl(parentSt, groupID);
       if (!csl?.id) continue;
 
-      const pushForKey = (k: string) => {
+      const pushWeb = (href: string, k: string) => {
+        const arr = this.zCitekeyToWebLinks.get(k) ?? [];
+        if (!arr.includes(href)) arr.push(href);
+        this.zCitekeyToWebLinks.set(k, arr);
+      };
+      const rawUrl = typeof d.url === 'string' ? d.url.trim() : '';
+      const webHref = normalizeWebHref(rawUrl);
+      if (/^https?:\/\//i.test(webHref)) {
+        pushWeb(webHref, csl.id);
+        if (parentSt.key && parentSt.key !== csl.id)
+          pushWeb(webHref, parentSt.key);
+      }
+
+      const mime = String(d.contentType ?? '');
+      const fn = String(d.filename ?? '');
+      const pathStr = String(d.path ?? '');
+      const isPdf =
+        mime.toLowerCase().includes('pdf') ||
+        /\.pdf(\b|$)/i.test(fn) ||
+        /\.pdf(\b|$)/i.test(pathStr);
+      if (!isPdf) continue;
+
+      const local = getLinkedFilePathFromAttachmentData(d);
+      if (!local) continue;
+
+      const pushPdf = (k: string) => {
         const arr = this.zCitekeyToPDFLinks.get(k) ?? [];
         if (!arr.includes(local)) arr.push(local);
         this.zCitekeyToPDFLinks.set(k, arr);
       };
-      pushForKey(csl.id);
-      if (parentSt.key && parentSt.key !== csl.id) pushForKey(parentSt.key);
+      pushPdf(csl.id);
+      if (parentSt.key && parentSt.key !== csl.id) pushPdf(parentSt.key);
     }
 
     this.setFuse(bib);
@@ -877,6 +895,8 @@ export class BibManager {
       if (e.dataset.citekey && !inTooltip) {
         const zLink = this.zCitekeyToLinks.get(e.dataset.citekey);
         const zPDFLinks = this.zCitekeyToPDFLinks.get(e.dataset.citekey);
+        const zWebLinks =
+          this.zCitekeyToWebLinks.get(e.dataset.citekey) ?? [];
         let linkText = '@' + e.dataset.citekey;
         let linkDest = app.metadataCache.getFirstLinkpathDest(
           linkText,
@@ -890,7 +910,8 @@ export class BibManager {
           );
         }
 
-        if (!linkDest && !zLink && !zPDFLinks) return;
+        if (!linkDest && !zLink && !zPDFLinks?.length && !zWebLinks.length)
+          return;
 
         div.createDiv({ cls: 'pwc-entry-btns' }, (div) => {
           if (linkDest) {
@@ -927,6 +948,15 @@ export class BibManager {
               });
             });
           }
+          zWebLinks.forEach((url) => {
+            div.createDiv('clickable-icon', (div) => {
+              setIcon(div, 'globe');
+              div.setAttr('aria-label', url);
+              div.onClickEvent(() => {
+                activeWindow.open(url, '_blank');
+              });
+            });
+          });
         });
       }
     });

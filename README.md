@@ -17,12 +17,39 @@ Affiche dans le panneau latéral une liste de références formatée pour chaque
 2. **Style de citation (CSL)** *(optionnel)*  
    Choisissez un style dans la liste ou indiquez un fichier `.csl` (chemin ou URL), éventuellement surchargé par le frontmatter de la note (`bibliography`, `csl`, `lang`, etc.).
 
-3. **Afficher le panneau**  
-   Palette de commandes : **« Pandoc Reference List : Show reference list »** (ou équivalent selon la langue de l’interface) pour ouvrir l’onglet des références dans la barre latérale.
+3. **Afficher le panneau des références**  
+   Palette de commandes : **« Pandoc Reference List : Show reference list »** (selon la langue de l’interface Obsidian) pour ouvrir l’onglet des références dans la barre latérale.
+
+4. **Langue du plugin** *(optionnel)*  
+   Dans les réglages du plugin, vous pouvez choisir la langue des libellés (paramètres, notices, panneau latéral dédié).
 
 ## Zotero (optionnel)
 
-L’intégration **Better BibTeX / Zotero** (pull depuis Zotero) repose sur le réseau local et les API Node : elle est prévue pour **Obsidian bureau** uniquement. Sur mobile, utilisez une bibliographie fichier dans le coffre.
+### Better BibTeX / flux local
+
+L’intégration via **Better BibTeX** et le réseau local (pull depuis Zotero) repose sur les API locales : elle convient surtout à **Obsidian bureau**. Sur mobile, préférez une bibliographie fichier dans le coffre.
+
+### Zotero Web API
+
+Une fois activée dans les réglages du plugin, vous pouvez synchroniser votre bibliothèque **via l’API officielle** (`api.zotero.org`) :
+
+- **Clé API** et bibliothèque **personnelle** ou **de groupe** (ID numérique).
+- **Fusion de bibliothèques de groupe** avec votre bibliothèque personnelle : listez les IDs de groupes à afficher en plus ; utilisez **Charger les groupes** pour récupérer les noms, ou définissez des **noms d’affichage personnalisés** (une ligne par ID + libellé) si vous préférez un titre lisible sans dépendre du cache.
+- **Synchronisation** bidirectionnelle (téléchargement et envoi des modifications selon le modèle Zotero API).
+- **Export BibTeX** optionnel vers un fichier `.bib` dans le coffre (chemin configurable), pour Pandoc, LaTeX ou Typst.
+
+Les données synchronisées sont stockées dans des fichiers JSON dédiés dans le dossier du plugin ; **aucune installation Node locale de Zotero n’est requise**, ce qui reste compatible avec une utilisation hors ligne du coffre après synchro.
+
+### Panneau « Bibliothèque Zotero »
+
+Depuis la palette de commandes : **« Open Zotero library panel »** / **« Ouvrir le panneau bibliothèque Zotero »**.
+
+Ce panneau affiche une **vue arborescente** (collections, éléments sans classe, pièces isolées, corbeille selon les données). Vous pouvez **filtrer** les références, ouvrir ou éditer des notices (dont les notes au format HTML Zotero), et accéder aux pièces jointes **PDF / fichiers** directement sur la ligne.
+
+- **Sous-arbre replié par défaut** : lorsqu’une entrée a des éléments enfants dans l’arbre (sous-notes, références sous un ouvrage, etc.), une **icône chevron** placée dans la bande des pièces jointes (à gauche des lignes PDF) permet d’**afficher ou masquer** ce bloc — pratique pour alléger la liste.
+- Les **badges de type** (livre, article de revue, note…) suivent la **langue d’interface du plugin** lorsque celle-ci est prise en charge.
+
+Après la première synchro, utilisez **« Sync Zotero library (Web API) »** pour actualiser ; les citations dans vos notes peuvent s’appuyer sur les données chargées via la bibliographie globale du plugin.
 
 ## Développement et build
 

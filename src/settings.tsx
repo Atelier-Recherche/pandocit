@@ -21,14 +21,21 @@ import {
 import { cslListRaw } from './bib/cslList';
 import { langListRaw } from './bib/cslLangList';
 import { ZoteroApiSetting } from './settings/ZoteroApiSetting';
+import {
+  downloadAndInstallPandocWasm,
+  isPandocWasmInstalled,
+} from './pandocWasmInstall';
+import { setPluginUiLocale } from './lang/helpers';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
+  pluginUiLocale: 'en',
   tooltipDelay: 400,
   zoteroGroups: [],
   renderCitations: true,
   renderCitationsReadingMode: true,
   renderLinkCitations: true,
   zoteroApiLibraryType: 'user',
+  zoteroApiMergeGroupIds: [],
 };
 
 export interface ZoteroGroup {
@@ -38,6 +45,9 @@ export interface ZoteroGroup {
 }
 
 export interface ReferenceListSettings {
+  /** Langue des chaînes du plugin : en | fr | de | es */
+  pluginUiLocale?: 'en' | 'fr' | 'de' | 'es';
+
   pathToBibliography?: string;
 
   cslStyleURL?: string;
@@ -63,6 +73,12 @@ export interface ReferenceListSettings {
   zoteroApiGroupId?: number;
   /** Vault-relative path for optional BibTeX export (Pandoc / LaTeX / Typst) */
   zoteroApiBibExportPath?: string;
+  /** IDs de groupes à fusionner avec la bib. personnelle (vue + citations) */
+  zoteroApiMergeGroupIds?: number[];
+  /** Noms affichés : rempli au chargement des groupes (clé = id numérique en string) */
+  zoteroApiGroupNamesCache?: Record<string, string>;
+  /** Libellés personnalisés par ID de groupe fusionné (priorité sur le cache API) */
+  zoteroApiMergeGroupLabels?: Record<string, string>;
 }
 
 export class ReferenceListSettingsTab extends PluginSettingTab {
@@ -77,6 +93,45 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
 
     containerEl.empty();
+
+    new Setting(containerEl)
+      .setName(t('Plugin interface language'))
+      .setDesc(t('Display language for this plugin (settings, notices, side panel).'))
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption('en', 'English')
+          .addOption('fr', 'Français')
+          .addOption('de', 'Deutsch')
+          .addOption('es', 'Español')
+          .setValue(this.plugin.settings.pluginUiLocale ?? 'en')
+          .onChange(async (value) => {
+            const v = value as 'en' | 'fr' | 'de' | 'es';
+            this.plugin.settings.pluginUiLocale = v;
+            setPluginUiLocale(v);
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    const wasmInstalled = isPandocWasmInstalled(this.plugin);
+    new Setting(containerEl)
+      .setName(t('Download Pandoc WASM'))
+      .setDesc(
+        `${t(
+          'Installs pandoc.wasm from Pandoc 3.9 next to main.js (official release ZIP). Desktop only — reload Obsidian after install.'
+        )}${wasmInstalled ? ` (${t('Installed')})` : ''}`
+      )
+      .addButton((btn) =>
+        btn
+          .setButtonText(t('Download WASM'))
+          .setCta()
+          .setTooltip(t('Download WASM'))
+          .setDisabled(!Platform.isDesktop)
+          .onClick(async () => {
+            await downloadAndInstallPandocWasm(this.plugin);
+            this.display();
+          })
+      );
 
     new Setting(containerEl)
       .setName(t('Path to bibliography file'))
@@ -225,7 +280,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         description={
           <>
             {t(
-              `This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file's frontmatter. A language code must be used when setting the language via frontmatter.`
+              'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.'
             )}{' '}
             <a
               href="https://github.com/citation-style-language/locales/blob/master/locales.json"

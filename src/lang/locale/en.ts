@@ -1,6 +1,23 @@
 // English
 
 export default {
+  'Plugin interface language': 'Plugin interface language',
+  'Display language for this plugin (settings, notices, side panel).':
+    'Display language for this plugin (settings, notices, side panel).',
+  'Download Pandoc WASM': 'Download Pandoc WASM',
+  'Installs pandoc.wasm from Pandoc 3.9 next to main.js (official release ZIP). Desktop only — reload Obsidian after install.':
+    'Installs pandoc.wasm from Pandoc 3.9 next to main.js (official release ZIP). Desktop only — reload Obsidian after install.',
+  'Download WASM': 'Download WASM',
+  'Downloading Pandoc WASM…': 'Downloading Pandoc WASM…',
+  'pandoc.wasm is already in the plugin folder.':
+    'pandoc.wasm is already in the plugin folder.',
+  'Pandoc WASM installed. Reload Obsidian to apply.':
+    'Pandoc WASM installed. Reload Obsidian to apply.',
+  'Pandoc WASM download failed.': 'Pandoc WASM download failed.',
+  'Pandoc WASM can only be installed on desktop.':
+    'Pandoc WASM can only be installed on desktop.',
+  Installed: 'Installed',
+
   // src/settings.ts
   'Path to bibliography file': 'Path to bibliography file',
   'The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file\'s frontmatter.':
@@ -81,7 +98,7 @@ export default {
   'Local file open is only available on desktop':
     'Local file open is only available on desktop',
   'Edit item form hint':
-    'Scroll the form to edit all fields, then save. Citation key is also written to Extra (Better BibTeX).',
+    'Scroll the form to edit all fields, then save. Use the citation key field for Better BibTeX.',
   'Creators (JSON)': 'Creators (JSON)',
   'Creators JSON hint':
     'Zotero creator array, e.g. [{ "creatorType": "author", "firstName": "A", "lastName": "B" }].',
@@ -98,6 +115,8 @@ export default {
   'Library catalog': 'Library catalog',
   'Call number': 'Call number',
   Language: 'Language',
+  Title: 'Title',
+  Remove: 'Remove',
   'Short title': 'Short title',
   Rights: 'Rights',
   'Access date': 'Access date',
@@ -205,4 +224,86 @@ export default {
     'Filtered flat list — clear search for tree',
   'Citation key (Better BibTeX)': 'Citation key (Better BibTeX)',
   Extra: 'Extra',
+  Saved: 'Saved',
+  Attachments: 'Attachments',
+  'Absolute path or vault-relative':
+    'Absolute path, or relative to vault root',
+  'Save link': 'Save link',
+  'Delete attachment confirm':
+    'Delete this attachment from Zotero?',
+  'Attachment removed': 'Attachment removed',
+  'New web link': 'New web link',
+  'New linked file': 'New linked file',
+  'Optional attachment title': 'Title (optional)',
+  'Attachment type read-only hint':
+    'Only the title can be edited for this attachment type.',
+  'File path required': 'Enter a file path',
+  'Select file on computer': 'Select a file on this computer',
+  Add: 'Add',
+  'created_but_not_in_snapshot':
+    'Saved on Zotero but not loaded here — run Sync.',
+  Delete: 'Delete',
+  'Delete item from Zotero confirm':
+    'Remove this item from Zotero? Linked child items may be affected.',
+  'Item deleted': 'Item deleted',
+  'Edit note': 'Edit note',
+  'Note HTML hint':
+    'Zotero stores notes as HTML. Edit the markup below, then save.',
+  'Load group libraries': 'Load group libraries',
+  'Fetch groups your API key can access':
+    'Lists groups returned by the Zotero API so you can paste the numeric ID.',
+  'Load groups': 'Load groups',
+  'Groups loaded': 'Groups loaded',
+  'No group libraries found': 'No group libraries found',
+  'Verify API key first to load groups':
+    'Verify the API key first so your user ID is known.',
+  'Merge group libraries (IDs)': 'Merge group libraries (IDs)',
+  'Comma-separated group IDs to show alongside your library. Load groups to pick names; run Sync for each cache.':
+    'Comma-separated group IDs to show alongside your library. Load groups to pick names; run Sync for each cache.',
+  'Toggle library subtree':
+    'Show or hide nested items (notes, etc.) under this entry',
+  'Badge PDF or file': 'PDF / file',
+  'Badge note': 'Note',
+  'Badge annotation': 'Annotation',
+  'Zotero type unknown': 'Item',
+  'Zotero type artwork': 'Artwork',
+  'Zotero type audioRecording': 'Audio recording',
+  'Zotero type bill': 'Bill',
+  'Zotero type blogPost': 'Blog post',
+  'Zotero type book': 'Book',
+  'Zotero type bookSection': 'Book section',
+  'Zotero type case': 'Case',
+  'Zotero type computerProgram': 'Computer program',
+  'Zotero type conferencePaper': 'Conference paper',
+  'Zotero type dictionaryEntry': 'Dictionary entry',
+  'Zotero type document': 'Document',
+  'Zotero type email': 'E-mail',
+  'Zotero type encyclopediaArticle': 'Encyclopedia article',
+  'Zotero type film': 'Film',
+  'Zotero type forumPost': 'Forum post',
+  'Zotero type hearing': 'Hearing',
+  'Zotero type instantMessage': 'Instant message',
+  'Zotero type interview': 'Interview',
+  'Zotero type journalArticle': 'Journal article',
+  'Zotero type letter': 'Letter',
+  'Zotero type magazineArticle': 'Magazine article',
+  'Zotero type manuscript': 'Manuscript',
+  'Zotero type map': 'Map',
+  'Zotero type newspaperArticle': 'Newspaper article',
+  'Zotero type patent': 'Patent',
+  'Zotero type podcast': 'Podcast',
+  'Zotero type presentation': 'Presentation',
+  'Zotero type preprint': 'Preprint',
+  'Zotero type radioBroadcast': 'Radio broadcast',
+  'Zotero type report': 'Report',
+  'Zotero type standard': 'Standard',
+  'Zotero type statute': 'Statute',
+  'Zotero type thesis': 'Thesis',
+  'Zotero type tvBroadcast': 'TV broadcast',
+  'Zotero type videoRecording': 'Video recording',
+  'Zotero type webpage': 'Web page',
+  'Merge group display names (optional)': 'Merge group display names (optional)',
+  'One line per merged group: numeric ID and display name (or ID=name). Shown in the library panel and collections; overrides names from Load groups when set.':
+    'One line per merged group: numeric ID and display name (or ID=name). Shown in the library panel and collections; overrides names from Load groups when set.',
+  'Could not open file': 'Could not open file',
 };

@@ -1,6 +1,8 @@
 import type ReferenceList from 'src/main';
 import { Notice } from 'obsidian';
 
+import { normalizeWebHref, pathForZoteroLinkedFileStorage } from './attachmentLinks';
+
 import type {
   StoredZoteroItem,
   SyncResult,
@@ -12,6 +14,7 @@ import {
 } from './zoteroItemWriteSanitize';
 import { ZoteroApiClient, parseItemArray } from './zoteroApiClient';
 import type { ZoteroApiItemEnvelope } from './zoteroApiClient';
+import { mergeUserAndGroupSnapshots, parseStorageItemKey } from './zoteroMerge';
 import { ZoteroStore, libraryCacheFileId } from './zoteroStore';
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -50,6 +53,55 @@ function parseVersionsJson(text: string): Record<string, number> {
   }
 }
 
+/** Clé item API (8 car. alphanum. — format Zotero base32, validation simple). */
+const ZOTERO_ITEM_KEY_RE = /^[0-9A-Z]{8}$/i;
+
+function isZoteroItemKeyString(s: string): boolean {
+  return ZOTERO_ITEM_KEY_RE.test(s.trim());
+}
+
+/**
+ * Clés créées par POST /items : la doc utilise `successful` ou parfois `success`.
+ * Les valeurs peuvent être la clé string ou des objets avec erreur dans `failed`.
+ */
+function extractNewItemKeysFromWriteResponse(text: string): string[] {
+  if (!text?.trim()) return [];
+  const out: string[] = [];
+  try {
+    const j = JSON.parse(text) as {
+      successful?: Record<string, unknown>;
+      success?: Record<string, unknown>;
+    };
+    const bucket = j.successful ?? j.success;
+    if (bucket && typeof bucket === 'object') {
+      for (const v of Object.values(bucket)) {
+        if (typeof v === 'string') {
+          const s = v.trim();
+          if (s && isZoteroItemKeyString(s)) out.push(s.toUpperCase());
+        } else if (v && typeof v === 'object' && v !== null && 'key' in v) {
+          const k = (v as { key?: unknown }).key;
+          if (typeof k === 'string' && isZoteroItemKeyString(k)) {
+            out.push(k.trim().toUpperCase());
+          }
+        }
+      }
+    }
+  } catch {
+    //
+  }
+  if (out.length) return out;
+
+  const idx = text.search(/"(?:successful|success)"\s*:/i);
+  const slice = idx >= 0 ? text.slice(idx, idx + 4000) : text;
+  const quoted = slice.matchAll(/"([0-9A-Z]{8})"/gi);
+  for (const m of quoted) {
+    const k = m[1].toUpperCase();
+    if (!out.includes(k)) out.push(k);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 export class ZoteroSyncService {
   client: ZoteroApiClient;
   store: ZoteroStore;
@@ -83,18 +135,179 @@ export class ZoteroSyncService {
     return `/users/${uid}`;
   }
 
-  async loadSnapshot(): Promise<ZoteroStoreSnapshot> {
+  /**
+   * Bibliothèques de groupe accessibles avec la clé API (`GET /users/{userID}/groups`).
+   */
+  async fetchGroupLibraries(): Promise<{ id: number; name: string }[]> {
+    this.updateApiKey();
+    const uid = this.plugin.settings.zoteroApiUserId;
+    if (uid == null) return [];
+    const res = await this.client.request(`/users/${uid}/groups?format=json`);
+    if (res.status !== 200 || !res.text?.trim()) return [];
+    try {
+      const raw = JSON.parse(res.text) as unknown;
+      if (!Array.isArray(raw)) return [];
+      const out: { id: number; name: string }[] = [];
+      for (const row of raw) {
+        if (!row || typeof row !== 'object') continue;
+        const o = row as {
+          library?: { type?: string; id?: number };
+          data?: { name?: string; groupID?: number };
+        };
+        let gid: number | undefined;
+        if (o.library?.type === 'group' && typeof o.library.id === 'number') {
+          gid = o.library.id;
+        } else if (
+          typeof o.data?.groupID === 'number' &&
+          Number.isFinite(o.data.groupID)
+        ) {
+          gid = o.data.groupID;
+        }
+        if (gid === undefined) continue;
+        const name =
+          typeof o.data?.name === 'string' && o.data.name.trim()
+            ? o.data.name.trim()
+            : `Group ${gid}`;
+        out.push({ id: gid, name });
+      }
+      out.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      );
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /** IDs groupes fusion depuis les réglages (dédoublonnés). */
+  private normalizedMergeGroupIds(): number[] {
+    const raw = this.plugin.settings.zoteroApiMergeGroupIds;
+    if (!raw?.length) return [];
+    const seen = new Set<number>();
+    const out: number[] = [];
+    for (const x of raw) {
+      const n =
+        typeof x === 'number' ? x : parseInt(String(x).trim(), 10);
+      if (!Number.isFinite(n) || n <= 0 || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+    return out;
+  }
+
+  /** Pour le panneau / synchro secondaire (même ordre que {@link loadSnapshot}). */
+  mergeGroupIdsResolved(): number[] {
+    return this.normalizedMergeGroupIds();
+  }
+
+  /** Fichier JSON courant selon les réglages (utilisateur ou groupe principal uniquement). */
+  async loadPrimarySnapshot(): Promise<ZoteroStoreSnapshot> {
     return this.store.load(this.getFileId());
   }
 
-  async saveSnapshot(snap: ZoteroStoreSnapshot): Promise<void> {
+  async savePrimarySnapshot(snap: ZoteroStoreSnapshot): Promise<void> {
     await this.store.save(this.getFileId(), snap);
+  }
+
+  async saveSnapshotFile(
+    fileId: string,
+    snap: ZoteroStoreSnapshot
+  ): Promise<void> {
+    await this.store.save(fileId, snap);
+  }
+
+  /** Cache disque du groupe (sans fusion) — pour une section dédiée dans le panneau. */
+  async loadRawGroupSnapshot(groupId: number): Promise<ZoteroStoreSnapshot> {
+    const uid = this.plugin.settings.zoteroApiUserId ?? 0;
+    return this.store.load(libraryCacheFileId(uid, 'group', groupId));
+  }
+
+  /**
+   * Vue utilisée par le panneau, les infobulles et la bib. : fusion bib. perso + groupe optionnel.
+   */
+  async loadSnapshot(): Promise<ZoteroStoreSnapshot> {
+    const primary = await this.loadPrimarySnapshot();
+    const s = this.plugin.settings;
+    const ids = this.normalizedMergeGroupIds();
+    if (s.zoteroApiLibraryType !== 'user' || ids.length === 0) {
+      return primary;
+    }
+    const uid = s.zoteroApiUserId ?? 0;
+    let merged = primary;
+    for (const gid of ids) {
+      const groupSnap = await this.store.load(
+        libraryCacheFileId(uid, 'group', gid)
+      );
+      merged = mergeUserAndGroupSnapshots(merged, groupSnap, gid);
+    }
+    return merged;
+  }
+
+  private getWriteRoute(itemKey: string): {
+    fileId: string;
+    prefix: string;
+    plainKey: string;
+    /** Si défini, il faut lancer `sync` avec la bib. de ce groupe */
+    syncAsGroupId?: number;
+  } {
+    const parsed = parseStorageItemKey(itemKey);
+    const s = this.plugin.settings;
+    const uid = s.zoteroApiUserId ?? 0;
+    if (parsed.scope === 'group') {
+      return {
+        fileId: libraryCacheFileId(uid, 'group', parsed.groupId),
+        prefix: `/groups/${parsed.groupId}`,
+        plainKey: parsed.plainKey,
+        syncAsGroupId: parsed.groupId,
+      };
+    }
+    if (s.zoteroApiLibraryType === 'group' && s.zoteroApiGroupId != null) {
+      return {
+        fileId: libraryCacheFileId(uid, 'group', s.zoteroApiGroupId),
+        prefix: `/groups/${s.zoteroApiGroupId}`,
+        plainKey: parsed.plainKey,
+        syncAsGroupId: s.zoteroApiGroupId,
+      };
+    }
+    return {
+      fileId: libraryCacheFileId(uid, 'user'),
+      prefix: `/users/${uid}`,
+      plainKey: parsed.plainKey,
+    };
+  }
+
+  private apiKeyForWrite(it: StoredZoteroItem, plainKey: string): string {
+    const dk = it.data?.key;
+    if (typeof dk === 'string' && dk.trim()) return dk.trim();
+    return plainKey;
   }
 
   /** Noms des dossiers Zotero (collections) pour l’arborescence du panneau */
   async fetchCollectionNames(): Promise<Map<string, string>> {
     this.updateApiKey();
-    const prefix = this.getLibraryPrefix();
+    const map = await this.fetchCollectionNamesForPrefix(this.getLibraryPrefix());
+    const s = this.plugin.settings;
+    const mergeIds = this.normalizedMergeGroupIds();
+    const cache = s.zoteroApiGroupNamesCache ?? {};
+    if (s.zoteroApiLibraryType === 'user' && mergeIds.length) {
+      for (const gid of mergeIds) {
+        const groupMap = await this.fetchCollectionNamesForPrefix(
+          `/groups/${gid}`
+        );
+        const collP = `g${gid}_c_`;
+        const custom = s.zoteroApiMergeGroupLabels?.[String(gid)]?.trim();
+        const glabel = custom || cache[String(gid)]?.trim() || `${gid}`;
+        for (const [k, name] of groupMap) {
+          map.set(`${collP}${k}`, `${glabel} — ${name}`);
+        }
+      }
+    }
+    return map;
+  }
+
+  private async fetchCollectionNamesForPrefix(
+    prefix: string
+  ): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     let start = 0;
     const limit = 100;
@@ -144,9 +357,9 @@ export class ZoteroSyncService {
     patch: Record<string, unknown>
   ): Promise<{ ok: boolean; error?: string }> {
     this.updateApiKey();
-    const prefix = this.getLibraryPrefix();
-    const snap = await this.loadSnapshot();
-    const it = snap.items[itemKey];
+    const route = this.getWriteRoute(itemKey);
+    const snap = await this.store.load(route.fileId);
+    const it = snap.items[route.plainKey];
     if (!it) return { ok: false, error: 'not_found' };
 
     let merged = stripReadOnlyZoteroItemData({ ...it.data });
@@ -162,9 +375,25 @@ export class ZoteroSyncService {
       }
     }
     merged = stripReadOnlyZoteroItemData(merged);
+    if (
+      String(merged.linkMode ?? '') === 'linked_file' &&
+      typeof merged.path === 'string'
+    ) {
+      merged.path = pathForZoteroLinkedFileStorage(merged.path);
+    }
+    const apiKey = this.apiKeyForWrite(it, route.plainKey);
     /** PATCH /items/{key} attend un objet partiel, pas un tableau (sinon 400). */
-    const body = JSON.stringify({ ...merged, key: it.key, version: it.version });
-    const res = await this.client.patchItem(prefix, itemKey, it.version, body);
+    const body = JSON.stringify({
+      ...merged,
+      key: apiKey,
+      version: it.version,
+    });
+    const res = await this.client.patchItem(
+      route.prefix,
+      apiKey,
+      it.version,
+      body
+    );
 
     if (res.status === 412) {
       return { ok: false, error: '412' };
@@ -189,7 +418,7 @@ export class ZoteroSyncService {
       (res.status === 204 || !res.text?.trim())
     ) {
       const getRes = await this.client.request(
-        `${prefix}/items/${itemKey}?format=json&includeTrashed=1`
+        `${route.prefix}/items/${apiKey}?format=json&includeTrashed=1`
       );
       if (getRes.status === 200 && getRes.text) {
         const again = parseItemArray(getRes.text) as ZoteroApiItemEnvelope[];
@@ -206,7 +435,7 @@ export class ZoteroSyncService {
           : it.version;
     }
 
-    snap.items[itemKey] = {
+    snap.items[route.plainKey] = {
       key: env?.key ?? it.key,
       version: serverVersion,
       synced: true,
@@ -219,34 +448,275 @@ export class ZoteroSyncService {
         res.lastModifiedVersion
       );
     }
-    await this.saveSnapshot(snap);
+    await this.saveSnapshotFile(route.fileId, snap);
     return { ok: true };
   }
 
-  /** Apply remote copy when resolving a conflict */
-  async fetchAndOverwriteItem(itemKey: string): Promise<boolean> {
+  /**
+   * Crée une pièce jointe enfant : lien web (`linked_url`) ou fichier lié (`linked_file`, chemin absolu).
+   */
+  async createChildAttachment(
+    parentKey: string,
+    spec: {
+      linkMode: 'linked_url' | 'linked_file';
+      title: string;
+      url?: string;
+      path?: string;
+    }
+  ): Promise<{ ok: boolean; error?: string }> {
     this.updateApiKey();
-    const prefix = this.getLibraryPrefix();
+    const route = this.getWriteRoute(parentKey);
+    let snap = await this.store.load(route.fileId);
+    const parent = snap.items[route.plainKey];
+    if (!parent) {
+      return { ok: false, error: 'not_found' };
+    }
+    if (String(parent.data.itemType) === 'attachment') {
+      return { ok: false, error: 'parent_is_attachment' };
+    }
+
+    const newData: Record<string, unknown> = {
+      itemType: 'attachment',
+      linkMode: spec.linkMode,
+      parentItem: route.plainKey,
+      title: spec.title.trim() || 'Attachment',
+    };
+    if (spec.linkMode === 'linked_url') {
+      const u = normalizeWebHref(spec.url?.trim() ?? '');
+      if (!/^https?:\/\//i.test(u)) {
+        return { ok: false, error: 'url_required' };
+      }
+      newData.url = u;
+    } else {
+      const p = pathForZoteroLinkedFileStorage(spec.path?.trim() ?? '');
+      if (!p) {
+        return { ok: false, error: 'path_required' };
+      }
+      newData.path = p;
+      const lower = p.toLowerCase();
+      newData.contentType = lower.endsWith('.pdf')
+        ? 'application/pdf'
+        : 'application/octet-stream';
+    }
+
+    const body = JSON.stringify([newData]);
+    const libVerBeforePost = snap.libraryVersion;
+    let res = await this.client.postItems(
+      route.prefix,
+      snap.libraryVersion,
+      body
+    );
+
+    /** 412 = version bibliothèque locale dépassée — tirage incrémental puis un nouveau POST (doc Zotero). */
+    for (let r412 = 0; res.status === 412 && r412 < 2; r412++) {
+      const pull = await this.pullIncremental(route.prefix, route.fileId);
+      await this.saveSnapshotFile(route.fileId, pull.snap);
+      snap = await this.store.load(route.fileId);
+      res = await this.client.postItems(
+        route.prefix,
+        snap.libraryVersion,
+        body
+      );
+    }
+
+    if (res.status === 412) {
+      return { ok: false, error: '412' };
+    }
+    if (res.status < 200 || res.status >= 300) {
+      let detail = `http_${res.status}`;
+      try {
+        const j = JSON.parse(res.text) as {
+          failed?: Record<string, { message?: string }>;
+        };
+        const f = j.failed && Object.values(j.failed)[0];
+        if (f && typeof f.message === 'string') detail = f.message;
+      } catch {
+        //
+      }
+      return { ok: false, error: detail };
+    }
+
+    try {
+      const written = JSON.parse(res.text) as {
+        failed?: Record<string, { code?: number; message?: string }>;
+      };
+      if (written.failed && Object.keys(written.failed).length > 0) {
+        const f = Object.values(written.failed)[0];
+        const msg =
+          f && typeof f.message === 'string' && f.message.trim()
+            ? f.message.trim()
+            : 'write_failed';
+        return { ok: false, error: msg };
+      }
+    } catch {
+      //
+    }
+
+    const newKeys = extractNewItemKeysFromWriteResponse(res.text);
+    const newKey = newKeys[0];
+
+    let mergedOk = false;
+    if (newKey) {
+      mergedOk = await this.fetchAndOverwriteItemPlain(
+        newKey,
+        route.prefix,
+        route.fileId
+      );
+    }
+
+    if (!mergedOk) {
+      const sRewind = await this.store.load(route.fileId);
+      sRewind.libraryVersion = libVerBeforePost;
+      await this.saveSnapshotFile(route.fileId, sRewind);
+      await this.syncRewindFallback(route.syncAsGroupId);
+    }
+
+    const sFinal = await this.store.load(route.fileId);
+    if (res.lastModifiedVersion != null) {
+      sFinal.libraryVersion = Math.max(
+        sFinal.libraryVersion,
+        res.lastModifiedVersion
+      );
+    }
+    await this.saveSnapshotFile(route.fileId, sFinal);
+
+    if (newKey && !sFinal.items[newKey]) {
+      return { ok: false, error: 'created_but_not_in_snapshot' };
+    }
+
+    return { ok: true };
+  }
+
+  /** Après POST raté à récupérer l’item : sync sur la bonne bib. (user vs groupe). */
+  private async syncRewindFallback(syncAsGroupId?: number): Promise<void> {
+    const s = this.plugin.settings;
+    if (syncAsGroupId != null) {
+      const bak = {
+        lt: s.zoteroApiLibraryType,
+        gid: s.zoteroApiGroupId,
+      };
+      s.zoteroApiLibraryType = 'group';
+      s.zoteroApiGroupId = syncAsGroupId;
+      try {
+        await this.syncLibraryForCurrentSettings();
+      } finally {
+        s.zoteroApiLibraryType = bak.lt;
+        s.zoteroApiGroupId = bak.gid;
+      }
+    } else {
+      await this.syncLibraryForCurrentSettings();
+    }
+  }
+
+  private async fetchAndOverwriteItemPlain(
+    itemKeyPlain: string,
+    prefix: string,
+    fileId: string
+  ): Promise<boolean> {
+    this.updateApiKey();
     const res = await this.client.request(
-      `${prefix}/items/${itemKey}?format=json&includeTrashed=1`
+      `${prefix}/items/${itemKeyPlain}?format=json&includeTrashed=1`
     );
     if (res.status !== 200) return false;
     const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
     const env = envelopes[0];
     if (!env?.data) return false;
-    const snap = await this.loadSnapshot();
-    snap.items[itemKey] = {
+    const snap = await this.store.load(fileId);
+    snap.items[itemKeyPlain] = {
       key: env.key,
       version: env.version,
       synced: true,
       data: env.data,
       conflict: false,
     };
-    await this.saveSnapshot(snap);
+    await this.saveSnapshotFile(fileId, snap);
     return true;
   }
 
+  /** Supprime un objet synchronisé (notice, pièce jointe, entrée catalogue, etc.). */
+  async deleteLibraryItem(itemKey: string): Promise<{ ok: boolean; error?: string }> {
+    this.updateApiKey();
+    const route = this.getWriteRoute(itemKey);
+    const snap = await this.store.load(route.fileId);
+    const it = snap.items[route.plainKey];
+    if (!it) return { ok: false, error: 'not_found' };
+
+    const apiKey = this.apiKeyForWrite(it, route.plainKey);
+    const res = await this.client.deleteItem(route.prefix, apiKey, it.version);
+    if (res.status === 412) return { ok: false, error: '412' };
+    if (res.status !== 204 && (res.status < 200 || res.status >= 300)) {
+      return { ok: false, error: `http_${res.status}` };
+    }
+
+    const s = await this.store.load(route.fileId);
+    delete s.items[route.plainKey];
+    if (res.lastModifiedVersion != null) {
+      s.libraryVersion = Math.max(s.libraryVersion, res.lastModifiedVersion);
+    }
+    await this.saveSnapshotFile(route.fileId, s);
+    return { ok: true };
+  }
+
+  /** @deprecated Préférer {@link deleteLibraryItem} — conservé pour les appels existants. */
+  async deleteAttachmentItem(itemKey: string): Promise<{ ok: boolean; error?: string }> {
+    const route = this.getWriteRoute(itemKey);
+    const snap = await this.store.load(route.fileId);
+    const it = snap.items[route.plainKey];
+    if (!it) return { ok: false, error: 'not_found' };
+    if (String(it.data.itemType) !== 'attachment') {
+      return { ok: false, error: 'not_attachment' };
+    }
+    return this.deleteLibraryItem(itemKey);
+  }
+
+  /** Apply remote copy when resolving a conflict */
+  async fetchAndOverwriteItem(itemKey: string): Promise<boolean> {
+    const route = this.getWriteRoute(itemKey);
+    const snap = await this.store.load(route.fileId);
+    const it = snap.items[route.plainKey];
+    const apiKey = it
+      ? this.apiKeyForWrite(it, route.plainKey)
+      : route.plainKey;
+    return this.fetchAndOverwriteItemPlain(apiKey, route.prefix, route.fileId);
+  }
+
   async sync(): Promise<SyncResult> {
+    let acc = await this.syncLibraryForCurrentSettings();
+    if (!acc.ok) return acc;
+
+    const s = this.plugin.settings;
+    const mergeIds = this.normalizedMergeGroupIds();
+    if (s.zoteroApiLibraryType !== 'user' || mergeIds.length === 0) {
+      return acc;
+    }
+
+    const bakLt = s.zoteroApiLibraryType;
+    const bakGid = s.zoteroApiGroupId;
+    try {
+      for (const mergeGid of mergeIds) {
+        s.zoteroApiLibraryType = 'group';
+        s.zoteroApiGroupId = mergeGid;
+        const r2 = await this.syncLibraryForCurrentSettings();
+        acc = {
+          ok: acc.ok && r2.ok,
+          libraryVersion: acc.libraryVersion,
+          downloaded: acc.downloaded + r2.downloaded,
+          uploaded: acc.uploaded + r2.uploaded,
+          deleted: acc.deleted + r2.deleted,
+          skippedConflicts: acc.skippedConflicts + r2.skippedConflicts,
+          error: r2.ok ? acc.error : r2.error,
+        };
+        if (!r2.ok) break;
+      }
+      return acc;
+    } finally {
+      s.zoteroApiLibraryType = bakLt;
+      s.zoteroApiGroupId = bakGid;
+    }
+  }
+
+  /** Une passe de synchro pour la bibliothèque correspondant aux réglages courants (fichier JSON dédié). */
+  private async syncLibraryForCurrentSettings(): Promise<SyncResult> {
     this.updateApiKey();
     const apiKey = this.plugin.settings.zoteroApiKey?.trim();
     if (!apiKey) {
@@ -284,7 +754,7 @@ export class ZoteroSyncService {
 
     const maxRounds = 12;
     for (let round = 0; round < maxRounds; round++) {
-      let snap = await this.loadSnapshot();
+      let snap = await this.loadPrimarySnapshot();
 
       // --- 1) Upload dirty items
       const dirtyKeys = Object.keys(snap.items).filter(
@@ -338,18 +808,18 @@ export class ZoteroSyncService {
         }
       }
 
-      await this.saveSnapshot(snap);
+      await this.savePrimarySnapshot(snap);
 
       if (hit412) {
         const pull = await this.pullIncremental(prefix);
         downloaded += pull.downloaded;
         deleted += pull.deleted;
         skippedConflicts += pull.skippedConflicts;
-        await this.saveSnapshot(pull.snap);
+        await this.savePrimarySnapshot(pull.snap);
         continue;
       }
 
-      snap = await this.loadSnapshot();
+      snap = await this.loadPrimarySnapshot();
       const readSince = snap.libraryVersion;
 
       // --- 2) Remote unchanged?
@@ -365,7 +835,7 @@ export class ZoteroSyncService {
             colRes.lastModifiedVersion
           );
         }
-        await this.saveSnapshot(snap);
+        await this.savePrimarySnapshot(snap);
         break;
       }
 
@@ -470,7 +940,7 @@ export class ZoteroSyncService {
       }
       snap.libraryVersion = maxLibVer;
 
-      await this.saveSnapshot(snap);
+      await this.savePrimarySnapshot(snap);
 
       const stillDirty = Object.keys(snap.items).some(
         (k) => snap.items[k] && !snap.items[k].synced && !snap.items[k].conflict
@@ -480,7 +950,7 @@ export class ZoteroSyncService {
       }
     }
 
-    const finalSnap = await this.loadSnapshot();
+    const finalSnap = await this.loadPrimarySnapshot();
     return {
       ok: true,
       libraryVersion: finalSnap.libraryVersion,
@@ -491,13 +961,21 @@ export class ZoteroSyncService {
     };
   }
 
-  private async pullIncremental(prefix: string): Promise<{
+  /**
+   * Met à jour un fichier cache bibliothèque depuis `since=libraryVersion` (API Zotero).
+   * @param fileId — défaut : bibliothèque active selon les réglages (voir {@link getFileId}).
+   */
+  private async pullIncremental(
+    prefix: string,
+    fileId?: string
+  ): Promise<{
     snap: ZoteroStoreSnapshot;
     downloaded: number;
     deleted: number;
     skippedConflicts: number;
   }> {
-    const snap = await this.loadSnapshot();
+    const fid = fileId ?? this.getFileId();
+    const snap = await this.store.load(fid);
     const readSince = snap.libraryVersion;
     let downloaded = 0;
     let deleted = 0;

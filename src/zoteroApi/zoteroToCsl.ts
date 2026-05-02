@@ -26,6 +26,18 @@ export function resolveCitationKey(
   return itemKey;
 }
 
+/** Pour le panneau Zotero : pas de @clé pour notes / pièces jointes (la clé API n’est pas une citation). */
+export function displayCitekeyForLibrary(
+  data: Record<string, unknown>,
+  itemKey: string
+): string {
+  const typ = String(data.itemType ?? '');
+  if (typ === 'note' || typ === 'attachment' || typ === 'annotation') {
+    return '';
+  }
+  return resolveCitationKey(data, itemKey);
+}
+
 /** Extract Better-BibTeX / manual citation key from Zotero `extra` */
 export function extractCitationKeyFromExtra(extra: unknown): string | null {
   if (typeof extra !== 'string' || !extra.trim()) return null;

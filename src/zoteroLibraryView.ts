@@ -11,16 +11,23 @@ import Fuse from 'fuse.js';
 import { langListRaw } from './bib/cslLangList';
 import { matchStoredLanguageToCslLocale } from './bib/zoteroLangNormalize';
 import ReferenceList from './main';
-import { insertTextInActiveMarkdownNote } from './helpers';
+import { getVaultRoot, insertTextInActiveMarkdownNote } from './helpers';
 import { t } from './lang/helpers';
 import {
+  displayCitekeyForLibrary,
   resolveCitationKey,
   stripCitationKeyLinesFromExtra,
 } from './zoteroApi/zoteroToCsl';
 import { resolveAttachmentLinks } from './zoteroApi/attachmentLinks';
 import { mountZoteroCreatorsEditor } from './zoteroApi/zoteroCreatorsEditor';
 import { getZoteroExtraEditableFields } from './zoteroApi/zoteroItemExtraFields';
-import type { StoredZoteroItem } from './zoteroApi/types';
+import type { StoredZoteroItem, ZoteroStoreSnapshot } from './zoteroApi/types';
+import {
+  mergeUserAndGroupSnapshots,
+  zoteroUriForStorageKey,
+} from './zoteroApi/zoteroMerge';
+import { getPath, isDesktop } from './platformAdapter';
+import { itemTypeBadgeLabel } from './zoteroItemTypeBadge';
 
 export const zoteroLibraryViewType = 'pwc-zotero-library-view';
 
@@ -41,6 +48,9 @@ type ItemTreeNode = {
   children: ItemTreeNode[];
 };
 
+/** Pièces jointes et annotations : pas comme sous-arbre ; les notes sont des lignes enfants dédiées */
+const CHILD_TYPES_NOT_IN_TREE = new Set(['attachment', 'annotation']);
+
 /** Types Zotero qui utilisent `publisher` plutôt que `publicationTitle` à l’écriture API */
 const ITEM_TYPES_WITH_PUBLISHER = new Set([
   'book',
@@ -52,6 +62,13 @@ const ITEM_TYPES_WITH_PUBLISHER = new Set([
   'computerProgram',
 ]);
 
+function formatZoteroWriteError(err: string | undefined): string {
+  if (!err) return '';
+  if (err === 'created_but_not_in_snapshot')
+    return t('created_but_not_in_snapshot');
+  return err;
+}
+
 const fuseOpts = {
   keys: [
     { name: 'title', weight: 0.45 },
@@ -60,6 +77,13 @@ const fuseOpts = {
   ],
   threshold: 0.38,
   minMatchCharLength: 1,
+};
+
+const EMPTY_ZOTERO_SNAPSHOT: ZoteroStoreSnapshot = {
+  libraryVersion: 0,
+  items: {},
+  pendingDeleteKeys: [],
+  retryFetchKeys: [],
 };
 
 function rowTitle(st: StoredZoteroItem): string {
@@ -75,14 +99,6 @@ function rowTitle(st: StoredZoteroItem): string {
     return plain || st.key;
   }
   return st.key;
-}
-
-function rowKindLabel(st: StoredZoteroItem): string {
-  const it = String(st.data.itemType ?? '');
-  if (it === 'attachment') return 'PDF / fichier';
-  if (it === 'note') return 'Note';
-  if (it === 'annotation') return 'Annotation';
-  return it || 'item';
 }
 
 export class ZoteroLibraryView extends ItemView {
@@ -103,9 +119,15 @@ export class ZoteroLibraryView extends ItemView {
     this.rootEl = this.contentEl.createDiv({
       cls: 'pwc-zotero-library__inner',
     });
-    this.rootEl.createEl('h4', {
+    const headingRow = this.rootEl.createDiv({
+      cls: 'pwc-zotero-library__heading-row',
+    });
+    headingRow.createEl('h4', {
       cls: 'pwc-zotero-library__heading',
       text: t('Zotero library'),
+    });
+    const headActions = headingRow.createDiv({
+      cls: 'pwc-zotero-library__heading-actions',
     });
     const searchWrap = this.rootEl.createDiv({
       cls: 'pwc-zotero-library__search',
@@ -121,13 +143,11 @@ export class ZoteroLibraryView extends ItemView {
       debounceTimer = window.setTimeout(() => this.render(), 120);
     });
 
-    const btnRow = this.rootEl.createDiv({
-      cls: 'pwc-zotero-library__toolbar',
+    const syncBtn = headActions.createEl('button', {
+      cls: 'clickable-icon pwc-zotero-library__head-btn',
+      attr: { type: 'button', 'aria-label': t('Sync now'), title: t('Sync now') },
     });
-    const syncBtn = btnRow.createEl('button', {
-      text: t('Sync now'),
-      cls: 'mod-cta',
-    });
+    setIcon(syncBtn, 'refresh-ccw');
     syncBtn.addEventListener('click', async () => {
       syncBtn.disabled = true;
       try {
@@ -143,10 +163,15 @@ export class ZoteroLibraryView extends ItemView {
       }
     });
 
-    const bibBtn = btnRow.createEl('button', {
-      text: t('Export .bib'),
+    const bibBtn = headActions.createEl('button', {
+      cls: 'clickable-icon pwc-zotero-library__head-btn',
+      attr: {
+        type: 'button',
+        'aria-label': t('Export Zotero API library to BibTeX'),
+        title: t('Export .bib'),
+      },
     });
-    bibBtn.addClass('mod-cta');
+    setIcon(bibBtn, 'book-marked');
     bibBtn.addEventListener('click', async () => {
       const p = this.plugin.settings.zoteroApiBibExportPath?.trim();
       if (!p) {
@@ -199,25 +224,59 @@ export class ZoteroLibraryView extends ItemView {
       key: st.key,
       stored: st,
       title: rowTitle(st),
-      citekey: resolveCitationKey(d, st.key),
+      citekey: displayCitekeyForLibrary(d, st.key),
     };
   }
 
-  async refreshList() {
-    const snap = await this.plugin.zoteroSync.loadSnapshot();
-    const settings = this.plugin.settings;
-
-    this.flatRows = Object.values(snap.items).map((st) => this.makeRow(st));
-    this.fuse = new Fuse(this.flatRows, fuseOpts);
-
+  /** Carte pièces jointes pour la liste plate filtrée (snapshot fusionné). */
+  private fillAttachmentMapFromSnap(snap: ZoteroStoreSnapshot): void {
     const trashedItems: StoredZoteroItem[] = [];
     const active: StoredZoteroItem[] = [];
     for (const st of Object.values(snap.items)) {
-      if (st.data.deleted === 1) {
-        trashedItems.push(st);
-      } else {
-        active.push(st);
+      if (st.data.deleted === 1) trashedItems.push(st);
+      else active.push(st);
+    }
+    const byParent = new Map<string, StoredZoteroItem[]>();
+    const byParentTrash = new Map<string, StoredZoteroItem[]>();
+    for (const st of active) {
+      const pid = st.data.parentItem;
+      if (typeof pid === 'string') {
+        if (!byParent.has(pid)) byParent.set(pid, []);
+        byParent.get(pid)!.push(st);
       }
+    }
+    for (const st of trashedItems) {
+      const pid = st.data.parentItem;
+      if (typeof pid === 'string') {
+        if (!byParentTrash.has(pid)) byParentTrash.set(pid, []);
+        byParentTrash.get(pid)!.push(st);
+      }
+    }
+    for (const [pid, list] of byParent) {
+      const atts = list.filter(
+        (k) => String(k.data.itemType) === 'attachment'
+      );
+      if (atts.length) this.attachmentChildrenByParent.set(pid, atts);
+    }
+    for (const [pid, list] of byParentTrash) {
+      const atts = list.filter(
+        (k) => String(k.data.itemType) === 'attachment'
+      );
+      if (atts.length) this.attachmentChildrenByParent.set(pid, atts);
+    }
+  }
+
+  /** Collections / sans classe / fichiers isolés / corbeille pour un snapshot. */
+  private snapToLibrarySectionChildren(
+    snap: ZoteroStoreSnapshot,
+    collNames: Map<string, string>,
+    resolveCollKey: (collectionKey: string) => string
+  ): ItemTreeNode[] {
+    const trashedItems: StoredZoteroItem[] = [];
+    const active: StoredZoteroItem[] = [];
+    for (const st of Object.values(snap.items)) {
+      if (st.data.deleted === 1) trashedItems.push(st);
+      else active.push(st);
     }
     const activeByKey = new Map(active.map((s) => [s.key, s] as const));
     const byParent = new Map<string, StoredZoteroItem[]>();
@@ -255,13 +314,6 @@ export class ZoteroLibraryView extends ItemView {
       return !trashByKey.has(pid);
     });
 
-    let collNames = new Map<string, string>();
-    try {
-      collNames = await this.plugin.zoteroSync.fetchCollectionNames();
-    } catch {
-      //
-    }
-
     const uncategorized: StoredZoteroItem[] = [];
     const looseFiles: StoredZoteroItem[] = [];
     const byColl = new Map<string, StoredZoteroItem[]>();
@@ -287,20 +339,6 @@ export class ZoteroLibraryView extends ItemView {
     const sortSt = (a: StoredZoteroItem, b: StoredZoteroItem) =>
       rowTitle(a).localeCompare(rowTitle(b));
 
-    this.attachmentChildrenByParent.clear();
-    for (const [pid, list] of byParent) {
-      const atts = list.filter(
-        (k) => String(k.data.itemType) === 'attachment'
-      );
-      if (atts.length) this.attachmentChildrenByParent.set(pid, atts);
-    }
-    for (const [pid, list] of byParentTrash) {
-      const atts = list.filter(
-        (k) => String(k.data.itemType) === 'attachment'
-      );
-      if (atts.length) this.attachmentChildrenByParent.set(pid, atts);
-    }
-
     const buildTreeNode = (st: StoredZoteroItem): ItemTreeNode => {
       const d = st.data as Record<string, unknown>;
       const kidsRaw = (byParent.get(st.key) ?? []).sort(sortSt);
@@ -308,13 +346,13 @@ export class ZoteroLibraryView extends ItemView {
         (k) => String(k.data.itemType) === 'attachment'
       );
       const treeKids = kidsRaw.filter(
-        (k) => String(k.data.itemType) !== 'attachment'
+        (k) => !CHILD_TYPES_NOT_IN_TREE.has(String(k.data.itemType))
       );
       return {
         stored: st,
-        citekey: resolveCitationKey(d, st.key),
+        citekey: displayCitekeyForLibrary(d, st.key),
         title: rowTitle(st),
-        labelKind: rowKindLabel(st),
+        labelKind: String(st.data.itemType ?? ''),
         inlineAttachments,
         children: treeKids.map(buildTreeNode),
       };
@@ -330,13 +368,13 @@ export class ZoteroLibraryView extends ItemView {
         (k) => String(k.data.itemType) === 'attachment'
       );
       const treeKids = kidsRaw.filter(
-        (k) => String(k.data.itemType) !== 'attachment'
+        (k) => !CHILD_TYPES_NOT_IN_TREE.has(String(k.data.itemType))
       );
       return {
         stored: st,
-        citekey: resolveCitationKey(d, st.key),
+        citekey: displayCitekeyForLibrary(d, st.key),
         title: rowTitle(st),
-        labelKind: rowKindLabel(st),
+        labelKind: String(st.data.itemType ?? ''),
         inlineAttachments,
         children: treeKids.map(buildTrashTreeNode),
       };
@@ -345,29 +383,17 @@ export class ZoteroLibraryView extends ItemView {
     const mapTrashRoots = (arr: StoredZoteroItem[]) =>
       arr.sort(sortSt).map(buildTrashTreeNode);
 
-    this.treeRoots = [];
-
-    const libLabel =
-      settings.zoteroApiLibraryType === 'group'
-        ? `${t('Group library')} (${settings.zoteroApiGroupId})`
-        : t('My library');
-    this.treeRoots.push({
-      stored: {} as StoredZoteroItem,
-      citekey: '',
-      title: libLabel,
-      labelKind: 'root',
-      inlineAttachments: [],
-      children: [],
-    });
-    const libRoot = this.treeRoots[0];
-
     const collKeysSorted = Array.from(byColl.keys()).sort((a, b) =>
-      (collNames.get(a) ?? a).localeCompare(collNames.get(b) ?? b)
+      (collNames.get(resolveCollKey(a)) ?? a).localeCompare(
+        collNames.get(resolveCollKey(b)) ?? b
+      )
     );
+
+    const out: ItemTreeNode[] = [];
     for (const ck of collKeysSorted) {
-      const name = collNames.get(ck) ?? ck;
+      const name = collNames.get(resolveCollKey(ck)) ?? ck;
       const arr = byColl.get(ck) ?? [];
-      libRoot.children.push({
+      out.push({
         stored: {} as StoredZoteroItem,
         citekey: '',
         title: `${t('Collection')}: ${name}`,
@@ -378,7 +404,7 @@ export class ZoteroLibraryView extends ItemView {
     }
 
     if (uncategorized.length) {
-      libRoot.children.push({
+      out.push({
         stored: {} as StoredZoteroItem,
         citekey: '',
         title: `${t('Uncategorized')} (${uncategorized.length})`,
@@ -389,7 +415,7 @@ export class ZoteroLibraryView extends ItemView {
     }
 
     if (looseFiles.length) {
-      libRoot.children.push({
+      out.push({
         stored: {} as StoredZoteroItem,
         citekey: '',
         title: `${t('Loose attachments / notes')} (${looseFiles.length})`,
@@ -400,13 +426,111 @@ export class ZoteroLibraryView extends ItemView {
     }
 
     if (trashedItems.length) {
-      libRoot.children.push({
+      out.push({
         stored: {} as StoredZoteroItem,
         citekey: '',
         title: `${t('Trash')} (${trashedItems.length})`,
         labelKind: 'section',
         inlineAttachments: [],
         children: mapTrashRoots(trashRoots),
+      });
+    }
+
+    return out;
+  }
+
+  async refreshList() {
+    const snapMerged = await this.plugin.zoteroSync.loadSnapshot();
+    const settings = this.plugin.settings;
+
+    this.flatRows = Object.values(snapMerged.items).map((st) =>
+      this.makeRow(st)
+    );
+    this.fuse = new Fuse(this.flatRows, fuseOpts);
+
+    this.attachmentChildrenByParent.clear();
+    this.fillAttachmentMapFromSnap(snapMerged);
+
+    let collNames = new Map<string, string>();
+    try {
+      collNames = await this.plugin.zoteroSync.fetchCollectionNames();
+    } catch {
+      //
+    }
+
+    const mergeIds = this.plugin.zoteroSync.mergeGroupIdsResolved();
+    const dualSection =
+      settings.zoteroApiLibraryType === 'user' && mergeIds.length > 0;
+
+    const cache = this.plugin.settings.zoteroApiGroupNamesCache ?? {};
+    const needFetchName = mergeIds.some((id) => !cache[String(id)]?.trim());
+    if (needFetchName && mergeIds.length) {
+      const list = await this.plugin.zoteroSync.fetchGroupLibraries();
+      const next = { ...cache };
+      for (const g of list) next[String(g.id)] = g.name;
+      this.plugin.settings.zoteroApiGroupNamesCache = next;
+      await this.plugin.saveSettings();
+    }
+    const names = this.plugin.settings.zoteroApiGroupNamesCache ?? {};
+
+    this.treeRoots = [];
+
+    if (dualSection) {
+      const primarySnap = await this.plugin.zoteroSync.loadPrimarySnapshot();
+      this.treeRoots.push({
+        stored: {} as StoredZoteroItem,
+        citekey: '',
+        title: t('My library'),
+        labelKind: 'root',
+        inlineAttachments: [],
+        children: this.snapToLibrarySectionChildren(
+          primarySnap,
+          collNames,
+          (ck) => ck
+        ),
+      });
+      const customLabels = settings.zoteroApiMergeGroupLabels ?? {};
+      for (const gid of mergeIds) {
+        const rawGroup = await this.plugin.zoteroSync.loadRawGroupSnapshot(gid);
+        const groupSnapPrefixed = mergeUserAndGroupSnapshots(
+          EMPTY_ZOTERO_SNAPSHOT,
+          rawGroup,
+          gid
+        );
+        const gname =
+          customLabels[String(gid)]?.trim() || names[String(gid)]?.trim();
+        const gtitle = gname
+          ? `${t('Group library')}: ${gname}`
+          : `${t('Group library')} (${gid})`;
+        this.treeRoots.push({
+          stored: {} as StoredZoteroItem,
+          citekey: '',
+          title: gtitle,
+          labelKind: 'root',
+          inlineAttachments: [],
+          children: this.snapToLibrarySectionChildren(
+            groupSnapPrefixed,
+            collNames,
+            (ck) => ck
+          ),
+        });
+      }
+    } else {
+      const libLabel =
+        settings.zoteroApiLibraryType === 'group'
+          ? `${t('Group library')} (${settings.zoteroApiGroupId})`
+          : t('My library');
+      this.treeRoots.push({
+        stored: {} as StoredZoteroItem,
+        citekey: '',
+        title: libLabel,
+        labelKind: 'root',
+        inlineAttachments: [],
+        children: this.snapToLibrarySectionChildren(
+          snapMerged,
+          collNames,
+          (ck) => ck
+        ),
       });
     }
 
@@ -473,17 +597,22 @@ export class ZoteroLibraryView extends ItemView {
       return;
     }
 
+    let nestEl: HTMLElement | null = null;
+    const hasSubtree = node.children.length > 0;
+
     const wrap = this.listEl.createDiv({
       cls: 'pwc-zotero-library__tree-row',
       attr: { style: `--pwc-tree-depth: ${depth}` },
     });
-    const rowEl = wrap.createDiv({ cls: 'pwc-zotero-library__row' });
+    const rowEl = wrap.createDiv({
+      cls: 'pwc-zotero-library__row',
+    });
     if (node.stored?.conflict) rowEl.addClass('is-conflict');
 
     const meta = rowEl.createDiv({ cls: 'pwc-zotero-library__meta' });
     meta.createDiv({
       cls: 'pwc-zotero-library__badge',
-      text: node.labelKind,
+      text: itemTypeBadgeLabel(String(node.stored?.data?.itemType ?? '')),
     });
     meta.createDiv({ cls: 'pwc-zotero-library__title', text: node.title });
     meta.createDiv({
@@ -494,14 +623,22 @@ export class ZoteroLibraryView extends ItemView {
     const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
     this.attachRowActions(actions, node.stored, node.citekey);
 
-    if (node.inlineAttachments?.length) {
-      this.renderInlineAttachments(wrap, node.inlineAttachments);
-    }
+    this.renderPdfStripInRow(
+      rowEl,
+      node.inlineAttachments,
+      hasSubtree
+        ? {
+            getNestEl: () => nestEl,
+          }
+        : undefined
+    );
 
     if (node.children.length) {
-      const nest = wrap.createDiv({ cls: 'pwc-zotero-library__tree-nest' });
+      nestEl = wrap.createDiv({
+        cls: 'pwc-zotero-library__tree-nest pwc-zotero-library__tree-nest--collapsed',
+      });
       const prev = this.listEl;
-      this.listEl = nest;
+      this.listEl = nestEl;
       for (const ch of node.children) {
         this.renderTreeNode(ch, depth + 1);
       }
@@ -518,27 +655,21 @@ export class ZoteroLibraryView extends ItemView {
     const meta = rowEl.createDiv({ cls: 'pwc-zotero-library__meta' });
     meta.createDiv({
       cls: 'pwc-zotero-library__badge',
-      text: rowKindLabel(row.stored),
+      text: itemTypeBadgeLabel(String(row.stored.data.itemType ?? '')),
     });
     meta.createDiv({ cls: 'pwc-zotero-library__title', text: row.title });
     meta.createDiv({
       cls: 'pwc-zotero-library__citekey',
-      text: `@${row.citekey}`,
+      text: row.citekey ? `@${row.citekey}` : '',
     });
     const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
     this.attachRowActions(actions, row.stored, row.citekey);
     const atts = this.attachmentChildrenByParent.get(row.key);
-    if (atts?.length) this.renderInlineAttachments(wrap, atts);
+    if (atts?.length) this.renderPdfStripInRow(rowEl, atts);
   }
 
   private zoteroSelectUri(itemKey: string): string | null {
-    const s = this.plugin.settings;
-    const libId =
-      s.zoteroApiLibraryType === 'group'
-        ? s.zoteroApiGroupId
-        : s.zoteroApiUserId;
-    if (libId == null) return null;
-    return `zotero://select/items/@${libId}_${itemKey}`;
+    return zoteroUriForStorageKey(itemKey, this.plugin.settings);
   }
 
   private attachmentLinkLabel(st: StoredZoteroItem): string {
@@ -567,63 +698,101 @@ export class ZoteroLibraryView extends ItemView {
     }
   }
 
-  private renderInlineAttachments(
-    host: HTMLElement,
-    attachments: StoredZoteroItem[]
+  /** Pièces jointes dans la même ligne que méta / actions (compact, icônes). */
+  private renderPdfStripInRow(
+    rowEl: HTMLElement,
+    attachments: StoredZoteroItem[] | undefined,
+    nestToggle?: {
+      /** Réf mis à jour après création du `tree-nest` (clics ultérieurs uniquement). */
+      getNestEl: () => HTMLElement | null;
+    }
   ) {
-    const row = host.createDiv({ cls: 'pwc-zotero-library__pdf-row' });
+    const hasPdf = !!(attachments?.length);
+    const hasNestToggle = !!nestToggle;
+    if (!hasPdf && !hasNestToggle) return;
+
+    const strip = rowEl.createDiv({ cls: 'pwc-zotero-library__pdf-strip' });
+
+    if (hasNestToggle && nestToggle) {
+      const getNest = nestToggle.getNestEl;
+      const btn = strip.createEl('button', {
+        cls: 'clickable-icon pwc-zotero-library__nest-toggle',
+        attr: {
+          type: 'button',
+          'aria-label': t('Toggle library subtree'),
+          title: t('Toggle library subtree'),
+          'aria-expanded': 'false',
+        },
+      });
+      setIcon(btn, 'chevron-right');
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const nest = getNest();
+        if (!nest) return;
+        const collapsed = nest.classList.toggle(
+          'pwc-zotero-library__tree-nest--collapsed'
+        );
+        setIcon(btn, collapsed ? 'chevron-right' : 'chevron-down');
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      });
+    }
+
+    if (!hasPdf || !attachments?.length) return;
+
     for (const att of attachments) {
       const links = resolveAttachmentLinks(att, this.zoteroSelectUri(att.key));
-      const lbl = this.attachmentLinkLabel(att);
-      const group = row.createDiv({ cls: 'pwc-zotero-library__pdf-group' });
+      const group = strip.createDiv({ cls: 'pwc-zotero-library__pdf-group' });
+      const typeIc = group.createSpan({
+        cls: 'pwc-zotero-library__pdf-type-ic',
+        attr: { 'aria-hidden': 'true' },
+      });
+      setIcon(typeIc, 'file-text');
       group.createSpan({
         cls: 'pwc-zotero-library__pdf-filename',
-        text: lbl,
+        text: this.attachmentLinkLabel(att),
       });
       for (const link of links) {
         if (link.kind === 'zotero') {
-          const chip = group.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip is-clickable',
-            attr: { title: link.href },
+          const chip = group.createEl('button', {
+            cls: 'clickable-icon pwc-zotero-library__pdf-icon-btn',
+            attr: {
+              type: 'button',
+              title: t('Open in Zotero'),
+              'aria-label': t('Open in Zotero'),
+            },
           });
-          const ic = chip.createSpan({ cls: 'pwc-zotero-library__pdf-chip-icon' });
-          setIcon(ic, 'library');
-          chip.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip-text',
-            text: t('Open in Zotero'),
-          });
+          setIcon(chip, 'library');
           chip.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             window.open(link.href);
           });
         } else if (link.kind === 'local') {
-          const chip = group.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip pwc-zotero-library__pdf-chip--local is-clickable',
-            attr: { title: link.path },
+          const chip = group.createEl('button', {
+            cls: 'clickable-icon pwc-zotero-library__pdf-icon-btn pwc-zotero-library__pdf-icon-btn--local',
+            attr: {
+              type: 'button',
+              title: link.path,
+              'aria-label': t('Local file'),
+            },
           });
-          const ic = chip.createSpan({ cls: 'pwc-zotero-library__pdf-chip-icon' });
-          setIcon(ic, 'folder-open');
-          chip.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip-text',
-            text: t('Local file'),
-          });
+          setIcon(chip, 'folder-open');
           chip.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.openLocalPath(link.path);
           });
         } else {
-          const chip = group.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip is-clickable',
-            attr: { title: link.href },
+          const chip = group.createEl('button', {
+            cls: 'clickable-icon pwc-zotero-library__pdf-icon-btn',
+            attr: {
+              type: 'button',
+              title: link.href,
+              'aria-label': t('Web link'),
+            },
           });
-          const ic = chip.createSpan({ cls: 'pwc-zotero-library__pdf-chip-icon' });
-          setIcon(ic, 'globe');
-          chip.createSpan({
-            cls: 'pwc-zotero-library__pdf-chip-text',
-            text: t('Web link'),
-          });
+          setIcon(chip, 'globe');
           chip.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -640,18 +809,48 @@ export class ZoteroLibraryView extends ItemView {
     citekey: string
   ) {
     const editBtn = actions.createEl('button', {
-      cls: 'mod-cta pwc-zotero-library__btn-edit',
+      cls: 'clickable-icon pwc-zotero-library__btn-edit',
+      attr: { type: 'button', 'aria-label': t('Edit'), title: t('Edit') },
     });
-    const editIcon = editBtn.createSpan({ cls: 'pwc-zotero-library__btn-edit-icon' });
-    setIcon(editIcon, 'pencil');
-    editBtn.createSpan({ text: ` ${t('Edit')}`, cls: 'pwc-zotero-library__btn-edit-label' });
+    setIcon(editBtn, 'pencil');
+    const afterSave = async () => {
+      await this.refreshList();
+      await this.plugin.bibManager.loadGlobalZoteroApi();
+      this.plugin.bibManager.fileCache.clear();
+      this.plugin.processReferences();
+    };
+
     editBtn.addEventListener('click', () => {
-      new ZoteroItemEditModal(this.plugin, stored, async () => {
-        await this.refreshList();
-        await this.plugin.bibManager.loadGlobalZoteroApi();
-        this.plugin.bibManager.fileCache.clear();
-        this.plugin.processReferences();
-      }).open();
+      const it = String(stored.data.itemType ?? '');
+      if (it === 'note') {
+        new ZoteroNoteEditModal(this.plugin, stored, afterSave).open();
+        return;
+      }
+      new ZoteroItemEditModal(this.plugin, stored, afterSave).open();
+    });
+
+    const delBtn = actions.createEl('button', {
+      cls: 'clickable-icon pwc-zotero-library__btn-delete',
+      attr: { type: 'button', 'aria-label': t('Delete') },
+    });
+    setIcon(delBtn, 'trash');
+    delBtn.addEventListener('click', () => {
+      void (async () => {
+        if (!window.confirm(t('Delete item from Zotero confirm'))) return;
+        const r = await this.plugin.zoteroSync.deleteLibraryItem(stored.key);
+        if (r.ok) {
+          new Notice(t('Item deleted'));
+          await afterSave();
+        } else if (r.error === '412') {
+          new Notice(
+            t(
+              'Library changed on the server — use “Sync” or “Use server copy”'
+            )
+          );
+        } else {
+          new Notice(t('Save failed') + (r.error ? `: ${r.error}` : ''));
+        }
+      })();
     });
 
     if (stored?.conflict) {
@@ -675,9 +874,14 @@ export class ZoteroLibraryView extends ItemView {
 
     if (citekey) {
       const insertBtn = actions.createEl('button', {
-        text: t('Insert citekey'),
+        cls: 'clickable-icon',
+        attr: {
+          type: 'button',
+          'aria-label': t('Insert citekey'),
+          title: t('Insert citekey'),
+        },
       });
-      insertBtn.addClass('clickable-icon');
+      setIcon(insertBtn, 'quote-glyph');
       insertBtn.addEventListener('click', () => {
         if (
           insertTextInActiveMarkdownNote(
@@ -690,6 +894,70 @@ export class ZoteroLibraryView extends ItemView {
         new Notice(t('Open a markdown note to insert citations'));
       });
     }
+  }
+}
+
+class ZoteroNoteEditModal extends Modal {
+  constructor(
+    private plugin: ReferenceList,
+    private item: StoredZoteroItem,
+    private onSaved: () => Promise<void>
+  ) {
+    super(plugin.app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass('pwc-zotero-edit-modal');
+    this.contentEl.closest('.modal')?.addClass('pwc-zotero-item-modal-shell');
+
+    this.titleEl.setText(t('Edit note'));
+
+    contentEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: t('Note HTML hint'),
+    });
+
+    const ta = contentEl.createEl('textarea', {
+      cls: 'pwc-zotero-edit-textarea',
+      text: String(this.item.data.note ?? ''),
+    });
+    ta.rows = 18;
+    ta.style.width = '100%';
+    ta.style.minHeight = '280px';
+
+    new Setting(contentEl).addButton((b) =>
+      b
+        .setButtonText(t('Save'))
+        .setCta()
+        .onClick(async () => {
+          const r = await this.plugin.zoteroSync.saveItemEdits(this.item.key, {
+            note: ta.value,
+          });
+          if (r.ok) {
+            new Notice(t('Saved'));
+            this.close();
+            await this.onSaved();
+          } else if (r.error === '412') {
+            new Notice(
+              t(
+                'Library changed on the server — use “Sync” or “Use server copy”'
+              )
+            );
+          } else {
+            new Notice(t('Save failed') + (r.error ? `: ${r.error}` : ''));
+          }
+        })
+    );
+
+    new Setting(contentEl).addButton((b) =>
+      b.setButtonText(t('Cancel')).onClick(() => this.close())
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 
@@ -815,6 +1083,10 @@ class ZoteroItemEditModal extends Modal {
     const extraIn = textField(t('Extra'), 'extra', true);
     extraIn.value = stripCitationKeyLinesFromExtra(data.extra);
 
+    if (itemType !== 'attachment' && itemType !== 'note') {
+      this.mountAttachmentsSection(contentEl, this.item);
+    }
+
     new Setting(contentEl).addButton((b) =>
       b
         .setButtonText(t('Save'))
@@ -872,6 +1144,300 @@ class ZoteroItemEditModal extends Modal {
     new Setting(contentEl).addButton((b) =>
       b.setButtonText(t('Cancel')).onClick(() => this.close())
     );
+  }
+
+  /**
+   * Pièces jointes enfants : liens web et fichiers liés (chemins absolus ou relatifs au coffre).
+   */
+  private mountAttachmentsSection(
+    contentEl: HTMLElement,
+    parentItem: StoredZoteroItem
+  ): void {
+    const pathMod = getPath();
+    const resolveLinkedPath = (input: string): string => {
+      const v = input.trim();
+      if (!v) return '';
+      if (pathMod.isAbsolute(v)) return pathMod.normalize(v);
+      const root = getVaultRoot();
+      if (!root) return v;
+      return pathMod.join(root, v.replace(/^[/\\]+/, ''));
+    };
+
+    const wrap = contentEl.createDiv({ cls: 'pwc-zotero-attachments' });
+    wrap.createEl('div', {
+      cls: 'setting-item-heading',
+      text: t('Attachments'),
+    });
+
+    const listHost = wrap.createDiv({ cls: 'pwc-zotero-attachments-list' });
+
+    const notify412 = () =>
+      new Notice(
+        t(
+          'Library changed on the server — use “Sync” or “Use server copy”'
+        )
+      );
+
+    const refreshList = async () => {
+      listHost.empty();
+      const snap = await this.plugin.zoteroSync.loadSnapshot();
+      const children = Object.values(snap.items).filter(
+        (st) =>
+          String(st.data.parentItem) === parentItem.key &&
+          String(st.data.itemType) === 'attachment' &&
+          Number(st.data.deleted) !== 1
+      );
+      children.sort((a, b) =>
+        rowTitle(a).localeCompare(rowTitle(b), undefined, {
+          sensitivity: 'base',
+        })
+      );
+
+      for (const att of children) {
+        const row = listHost.createDiv({
+          cls: 'pwc-zotero-attachment-row',
+        });
+        const d = att.data as Record<string, unknown>;
+        const lm = String(d.linkMode ?? '');
+        const isLinkedUrl = lm === 'linked_url';
+        const isLinkedFile = lm === 'linked_file';
+
+        let modeLabel = '';
+        if (isLinkedUrl) modeLabel = t('Web link');
+        else if (isLinkedFile) modeLabel = t('Local file');
+        else modeLabel = lm || 'attachment';
+
+        row.createEl('div', {
+          cls: 'setting-item-name',
+          text: modeLabel,
+        });
+
+        const titleRow = row.createDiv({ cls: 'pwc-zotero-field' });
+        titleRow.createEl('label', { text: t('Title') });
+        const titleIn = titleRow.createEl('input', {
+          type: 'text',
+          cls: 'pwc-zotero-edit-input',
+          value: String(d.title ?? ''),
+        });
+
+        let linkIn: HTMLInputElement | undefined;
+        if (isLinkedUrl) {
+          const urlRow = row.createDiv({ cls: 'pwc-zotero-field' });
+          urlRow.createEl('label', { text: t('URL') });
+          linkIn = urlRow.createEl('input', {
+            type: 'text',
+            cls: 'pwc-zotero-edit-input',
+            value: String(d.url ?? ''),
+          });
+        } else if (isLinkedFile) {
+          const pathRow = row.createDiv({ cls: 'pwc-zotero-field' });
+          pathRow.createEl('label', {
+            text: t('Absolute path or vault-relative'),
+          });
+          linkIn = pathRow.createEl('input', {
+            type: 'text',
+            cls: 'pwc-zotero-edit-input',
+            value: String(d.path ?? ''),
+          });
+        } else {
+          row.createEl('p', {
+            cls: 'setting-item-description',
+            text: t('Attachment type read-only hint'),
+          });
+        }
+
+        const btnRow = row.createDiv({
+          cls: 'pwc-zotero-attachment-actions',
+        });
+
+        const saveRow = async (patch: Record<string, unknown>) => {
+          const r = await this.plugin.zoteroSync.saveItemEdits(att.key, patch);
+          if (r.ok) {
+            new Notice(t('Saved'));
+            await refreshList();
+            await this.onSaved();
+          } else if (r.error === '412') notify412();
+          else {
+            new Notice(t('Save failed') + (r.error ? `: ${r.error}` : ''));
+          }
+        };
+
+        if (!isLinkedUrl && !isLinkedFile) {
+          btnRow
+            .createEl('button', { text: t('Save'), cls: 'mod-cta' })
+            .addEventListener('click', () => {
+              void saveRow({
+                title: titleIn.value.trim() || undefined,
+              });
+            });
+        } else {
+          btnRow
+            .createEl('button', { text: t('Save link'), cls: 'mod-cta' })
+            .addEventListener('click', () => {
+              const patch: Record<string, unknown> = {
+                title: titleIn.value.trim() || undefined,
+              };
+              if (isLinkedUrl && linkIn) patch.url = linkIn.value.trim();
+              else if (isLinkedFile && linkIn)
+                patch.path = resolveLinkedPath(linkIn.value);
+              void saveRow(patch);
+            });
+        }
+
+        btnRow
+          .createEl('button', { text: t('Remove') })
+          .addEventListener('click', () => {
+            if (!window.confirm(t('Delete attachment confirm'))) return;
+            void (async () => {
+              const r = await this.plugin.zoteroSync.deleteLibraryItem(att.key);
+              if (r.ok) {
+                new Notice(t('Attachment removed'));
+                await refreshList();
+                await this.onSaved();
+              } else if (r.error === '412') notify412();
+              else {
+                new Notice(
+                  t('Save failed') + (r.error ? `: ${r.error}` : '')
+                );
+              }
+            })();
+          });
+      }
+    };
+
+    const addWeb = wrap.createDiv({ cls: 'pwc-zotero-attachments-add' });
+    addWeb.createEl('div', {
+      cls: 'setting-item-name',
+      text: t('New web link'),
+    });
+    const urlTitleIn = addWeb.createEl('input', {
+      type: 'text',
+      cls: 'pwc-zotero-edit-input',
+      attr: { placeholder: t('Optional attachment title') },
+    });
+    const urlIn = addWeb.createEl('input', {
+      type: 'text',
+      cls: 'pwc-zotero-edit-input',
+      attr: { placeholder: t('URL') },
+    });
+    const webBtns = addWeb.createDiv({
+      cls: 'pwc-zotero-attachment-actions',
+    });
+    webBtns
+      .createEl('button', { text: t('Add'), cls: 'mod-cta' })
+      .addEventListener('click', () => {
+        void (async () => {
+          const r = await this.plugin.zoteroSync.createChildAttachment(
+            parentItem.key,
+            {
+              linkMode: 'linked_url',
+              title: urlTitleIn.value.trim() || t('Web link'),
+              url: urlIn.value.trim(),
+            }
+          );
+          if (r.ok) {
+            new Notice(t('Saved'));
+            urlTitleIn.value = '';
+            urlIn.value = '';
+            await refreshList();
+            await this.onSaved();
+          } else if (r.error === '412') notify412();
+          else if (r.error === 'url_required')
+            new Notice(t('URL'));
+          else {
+            new Notice(
+              t('Save failed') +
+                (r.error ? `: ${formatZoteroWriteError(r.error)}` : '')
+            );
+          }
+        })();
+      });
+
+    const addFile = wrap.createDiv({ cls: 'pwc-zotero-attachments-add' });
+    addFile.createEl('div', {
+      cls: 'setting-item-name',
+      text: t('New linked file'),
+    });
+    const fileTitleIn = addFile.createEl('input', {
+      type: 'text',
+      cls: 'pwc-zotero-edit-input',
+      attr: { placeholder: t('Optional attachment title') },
+    });
+    const pathFlex = addFile.createDiv({
+      cls: 'pwc-zotero-field pwc-zotero-field--path-row',
+    });
+    pathFlex.createEl('label', {
+      text: t('Absolute path or vault-relative'),
+    });
+    const pathInner = pathFlex.createDiv({
+      cls: 'pwc-zotero-path-with-folder',
+    });
+    const filePathIn = pathInner.createEl('input', {
+      type: 'text',
+      cls: 'pwc-zotero-edit-input',
+      attr: { placeholder: t('Absolute path or vault-relative') },
+    });
+    const browseBtn = pathInner.createEl('button', {
+      cls: 'clickable-icon',
+      attr: {
+        'aria-label': t('Select file on computer'),
+        type: 'button',
+      },
+    });
+    setIcon(browseBtn, 'folder');
+    browseBtn.addEventListener('click', () => {
+      if (!isDesktop) {
+        new Notice(
+          t(
+            'File selection is only available on desktop. Please enter the path manually.'
+          )
+        );
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const picked = require('electron').remote.dialog.showOpenDialogSync({
+        defaultPath: getVaultRoot() || undefined,
+        properties: ['openFile'],
+      });
+      if (picked?.length) filePathIn.value = picked[0];
+    });
+    const fileBtns = addFile.createDiv({
+      cls: 'pwc-zotero-attachment-actions',
+    });
+    fileBtns
+      .createEl('button', { text: t('Add'), cls: 'mod-cta' })
+      .addEventListener('click', () => {
+        void (async () => {
+          if (!filePathIn.value.trim()) {
+            new Notice(t('File path required'));
+            return;
+          }
+          const resolvedPath = resolveLinkedPath(filePathIn.value);
+          const r = await this.plugin.zoteroSync.createChildAttachment(
+            parentItem.key,
+            {
+              linkMode: 'linked_file',
+              title: fileTitleIn.value.trim() || t('Local file'),
+              path: resolvedPath,
+            }
+          );
+          if (r.ok) {
+            new Notice(t('Saved'));
+            fileTitleIn.value = '';
+            filePathIn.value = '';
+            await refreshList();
+            await this.onSaved();
+          } else if (r.error === '412') notify412();
+          else {
+            new Notice(
+              t('Save failed') +
+                (r.error ? `: ${formatZoteroWriteError(r.error)}` : '')
+            );
+          }
+        })();
+      });
+
+    void refreshList();
   }
 
   onClose() {

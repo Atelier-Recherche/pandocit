@@ -6,6 +6,50 @@ import { t } from 'src/lang/helpers';
 import { noticeSyncResult } from 'src/zoteroApi/zoteroSync';
 import { writeBibtexExportToVault } from 'src/zoteroApi/zoteroToBibtex';
 
+function formatMergeIds(ids: number[] | undefined): string {
+  return (ids ?? []).join(', ');
+}
+
+function parseMergeGroupIdsFromText(s: string): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const part of s.split(/[\s,;]+/)) {
+    const x = part.trim();
+    if (!x) continue;
+    const n = parseInt(x, 10);
+    if (Number.isFinite(n) && n > 0 && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out;
+}
+
+function formatMergeGroupLabels(l: Record<string, string> | undefined): string {
+  if (!l || Object.keys(l).length === 0) return '';
+  return Object.entries(l)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([id, name]) => `${id} ${name}`)
+    .join('\n');
+}
+
+/** Une ligne : `12345 Nom du groupe` ou `12345=Nom du groupe` */
+function parseMergeGroupLabelsFromText(s: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of s.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    let m = t.match(/^(\d+)\s*=\s*(.+)$/);
+    if (m) {
+      out[m[1]] = m[2].trim();
+      continue;
+    }
+    m = t.match(/^(\d+)\s+(.+)$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
 export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
   const [enabled, setEnabled] = React.useState(
     !!plugin.settings.pullFromZoteroApi
@@ -27,6 +71,15 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
   const [bibPath, setBibPath] = React.useState(
     plugin.settings.zoteroApiBibExportPath ?? ''
   );
+  const [groupChoices, setGroupChoices] = React.useState<
+    { id: number; name: string }[]
+  >([]);
+  const [mergeGroupsText, setMergeGroupsText] = React.useState(
+    formatMergeIds(plugin.settings.zoteroApiMergeGroupIds)
+  );
+  const [mergeGroupLabelsText, setMergeGroupLabelsText] = React.useState(
+    formatMergeGroupLabels(plugin.settings.zoteroApiMergeGroupLabels)
+  );
 
   const persistApi = React.useCallback(() => {
     plugin.settings.zoteroApiKey = apiKey.trim() || undefined;
@@ -35,8 +88,23 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
       libType === 'group' && groupId.trim()
         ? parseInt(groupId.trim(), 10)
         : undefined;
+    plugin.settings.zoteroApiMergeGroupIds =
+      libType === 'user'
+        ? parseMergeGroupIdsFromText(mergeGroupsText)
+        : [];
+    plugin.settings.zoteroApiMergeGroupLabels =
+      libType === 'user'
+        ? parseMergeGroupLabelsFromText(mergeGroupLabelsText)
+        : {};
     plugin.saveSettings();
-  }, [apiKey, libType, groupId, plugin]);
+  }, [
+    apiKey,
+    libType,
+    groupId,
+    mergeGroupsText,
+    mergeGroupLabelsText,
+    plugin,
+  ]);
 
   const verifyKey = React.useCallback(async () => {
     persistApi();
@@ -47,6 +115,26 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
       new Notice(t('API key OK'));
     } else {
       new Notice(t('Could not validate API key'));
+    }
+  }, [persistApi, plugin]);
+
+  const loadGroupList = React.useCallback(async () => {
+    persistApi();
+    plugin.zoteroSync.updateApiKey();
+    if (!plugin.settings.zoteroApiUserId) {
+      new Notice(t('Verify API key first to load groups'));
+      return;
+    }
+    const list = await plugin.zoteroSync.fetchGroupLibraries();
+    setGroupChoices(list);
+    const cache = { ...(plugin.settings.zoteroApiGroupNamesCache ?? {}) };
+    for (const g of list) cache[String(g.id)] = g.name;
+    plugin.settings.zoteroApiGroupNamesCache = cache;
+    plugin.saveSettings();
+    if (list.length === 0) {
+      new Notice(t('No group libraries found'));
+    } else {
+      new Notice(`${t('Groups loaded')}: ${list.length}`);
     }
   }, [persistApi, plugin]);
 
@@ -157,22 +245,100 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
           </div>
 
           {libType === 'group' ? (
+            <>
+              <div className="pwc-setting-item setting-item">
+                <SettingItem
+                  name={t('Group ID')}
+                  description={t('Numeric group ID from the Zotero website URL.')}
+                >
+                  <input
+                    type="text"
+                    spellCheck={false}
+                    list="pwc-zotero-group-pick"
+                    value={groupId}
+                    onChange={(e) => {
+                      setGroupId(e.target.value);
+                      const n = parseInt(e.target.value.trim(), 10);
+                      plugin.settings.zoteroApiGroupId = Number.isFinite(n)
+                        ? n
+                        : undefined;
+                      plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                    }}
+                  />
+                  <datalist id="pwc-zotero-group-pick">
+                    {groupChoices.map((g) => (
+                      <option
+                        key={g.id}
+                        value={String(g.id)}
+                        label={g.name}
+                      />
+                    ))}
+                  </datalist>
+                </SettingItem>
+              </div>
+              <div className="pwc-setting-item setting-item">
+                <SettingItem
+                  name={t('Load group libraries')}
+                  description={t('Fetch groups your API key can access')}
+                >
+                  <button
+                    type="button"
+                    className="mod-cta"
+                    onClick={() => void loadGroupList()}
+                  >
+                    {t('Load groups')}
+                  </button>
+                </SettingItem>
+              </div>
+            </>
+          ) : null}
+
+          {libType === 'user' ? (
             <div className="pwc-setting-item setting-item">
               <SettingItem
-                name={t('Group ID')}
-                description={t('Numeric group ID from the Zotero website URL.')}
+                name={t('Merge group libraries (IDs)')}
+                description={t(
+                  'Comma-separated group IDs to show alongside your library. Load groups to pick names; run Sync for each cache.'
+                )}
               >
-                <input
-                  type="text"
+                <textarea
+                  className="pwc-zotero-merge-groups"
                   spellCheck={false}
-                  value={groupId}
+                  rows={2}
+                  placeholder="12345, 67890"
+                  value={mergeGroupsText}
                   onChange={(e) => {
-                    setGroupId(e.target.value);
-                    const n = parseInt(e.target.value.trim(), 10);
-                    plugin.settings.zoteroApiGroupId = Number.isFinite(n)
-                      ? n
-                      : undefined;
-                    plugin.saveSettings();
+                    const v = e.target.value;
+                    setMergeGroupsText(v);
+                    plugin.settings.zoteroApiMergeGroupIds =
+                      parseMergeGroupIdsFromText(v);
+                    plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                  }}
+                />
+              </SettingItem>
+            </div>
+          ) : null}
+
+          {libType === 'user' ? (
+            <div className="pwc-setting-item setting-item">
+              <SettingItem
+                name={t('Merge group display names (optional)')}
+                description={t(
+                  'One line per merged group: numeric ID and display name (or ID=name). Shown in the library panel and collections; overrides names from Load groups when set.'
+                )}
+              >
+                <textarea
+                  className="pwc-zotero-merge-groups"
+                  spellCheck={false}
+                  rows={3}
+                  placeholder={'6538473 Mon équipe\n123456=Labo'}
+                  value={mergeGroupLabelsText}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setMergeGroupLabelsText(v);
+                    plugin.settings.zoteroApiMergeGroupLabels =
+                      parseMergeGroupLabelsFromText(v);
+                    plugin.saveSettings(() => plugin.bibManager.reinit(true));
                   }}
                 />
               </SettingItem>

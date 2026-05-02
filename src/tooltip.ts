@@ -146,10 +146,12 @@ export class TooltipManager {
     const zLink = this.plugin.bibManager.zCitekeyToLinks.get(primaryKey);
     const pdfPaths =
       this.plugin.bibManager.zCitekeyToPDFLinks.get(primaryKey) ?? [];
+    const webUrls =
+      this.plugin.bibManager.zCitekeyToWebLinks.get(primaryKey) ?? [];
     const loc = el.dataset.citeLocator;
     const page = loc ? pageNumberFromLocator(loc) : null;
 
-    if (!zLink && !pdfPaths.length) return;
+    if (!zLink && !pdfPaths.length && !webUrls.length) return;
 
     const bar = tooltip.createDiv({ cls: 'pwc-tooltip-cite-actions' });
     if (zLink) {
@@ -187,6 +189,21 @@ export class TooltipManager {
               sourcePath,
               page
             );
+            this.hideTooltip();
+          });
+        }
+      );
+    }
+    for (const url of webUrls) {
+      bar.createDiv(
+        {
+          cls: 'pwc-tooltip-cite-btn clickable-icon',
+          attr: { 'aria-label': `${t('Web link')}: ${url}` },
+        },
+        (div) => {
+          setIcon(div, 'globe');
+          div.onClickEvent(() => {
+            activeWindow.open(url, '_blank');
             this.hideTooltip();
           });
         }

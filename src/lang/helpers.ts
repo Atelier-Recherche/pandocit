@@ -50,13 +50,25 @@ const localeMap: { [k: string]: Partial<typeof en> } = {
   zh: zhCN,
 };
 
-const lang = window.localStorage.getItem('language');
-const locale = localeMap[lang || 'en'];
+/** Langues avec traduction complète des chaînes du plugin (réglage dédié). */
+export const PLUGIN_UI_LOCALES = ['en', 'fr', 'de', 'es'] as const;
+export type PluginUiLocale = (typeof PLUGIN_UI_LOCALES)[number];
+
+let pluginUiLocale: string = 'en';
+
+/** À appeler au chargement des réglages et quand l’utilisateur change la langue. */
+export function setPluginUiLocale(code: string | undefined): void {
+  const c = (code || 'en').toLowerCase();
+  pluginUiLocale = PLUGIN_UI_LOCALES.includes(c as PluginUiLocale)
+    ? c
+    : 'en';
+}
+
+export function getPluginUiLocale(): string {
+  return pluginUiLocale;
+}
 
 export function t(str: keyof typeof en): string {
-  if (!locale) {
-    console.error('Error: locale not found', lang);
-  }
-
+  const locale = localeMap[pluginUiLocale];
   return (locale && locale[str]) || en[str];
 }

@@ -166,6 +166,51 @@ export class ZoteroApiClient {
       lastModifiedVersion: res.lastModifiedVersion,
     };
   }
+
+  /** Création d’objets (ex. pièce jointe enfant) — `If-Unmodified-Since-Version` = version bibliothèque. */
+  async postItems(
+    prefix: string,
+    libraryVersion: number,
+    jsonBody: string
+  ): Promise<{
+    status: number;
+    text: string;
+    lastModifiedVersion?: number;
+  }> {
+    const path = `${prefix}/items`;
+    const res = await this.request(path, {
+      method: 'POST',
+      body: jsonBody,
+      contentType: 'application/json',
+      ifUnmodifiedSinceVersion: libraryVersion,
+    });
+    return {
+      status: res.status,
+      text: res.text,
+      lastModifiedVersion: res.lastModifiedVersion,
+    };
+  }
+
+  async deleteItem(
+    prefix: string,
+    itemKey: string,
+    itemVersion: number
+  ): Promise<{
+    status: number;
+    text: string;
+    lastModifiedVersion?: number;
+  }> {
+    const path = `${prefix}/items/${itemKey}`;
+    const res = await this.request(path, {
+      method: 'DELETE',
+      ifUnmodifiedSinceVersion: itemVersion,
+    });
+    return {
+      status: res.status,
+      text: res.text,
+      lastModifiedVersion: res.lastModifiedVersion,
+    };
+  }
 }
 
 /** API envelope for one item */

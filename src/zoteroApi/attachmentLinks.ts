@@ -10,6 +10,29 @@ export type ResolvedAttachmentLink =
   | { kind: 'web'; href: string };
 
 /**
+ * Chemins pour `linked_file` côté API Zotero / client bureau :
+ * sous **Windows**, Zotero attend des antislashes (`D:\…`), comme les pièces jointes
+ * créées dans l’appli — les slashs POSIX (`D:/…`) ouvrent souvent mal le fichier.
+ */
+export function pathForZoteroLinkedFileStorage(absPath: string): string {
+  const p = absPath.trim();
+  if (!p) return p;
+  if (/^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')) {
+    return p.replace(/\//g, '\\');
+  }
+  return p.replace(/\\/g, '/');
+}
+
+/** URL utilisable dans un navigateur (Zotero accepte souvent une URL sans schéma). */
+export function normalizeWebHref(raw: string): string {
+  const u = raw.trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^\/\//.test(u)) return `https:${u}`;
+  return `https://${u}`;
+}
+
+/**
  * Chemin local exploitable pour une pièce jointe « fichier lié » (API Zotero).
  * Les chemins `attachments:…` (stockage interne Zotero) ne sont pas résolus ici.
  */
@@ -28,7 +51,12 @@ export function getLinkedFilePathFromAttachmentData(
     raw.startsWith('\\\\') ||
     raw.startsWith('/');
 
-  if (!looksFs) return null;
+  const acceptAsPath =
+    looksFs ||
+    (linkMode === 'linked_file' &&
+      (raw.includes('/') || raw.includes('\\')));
+
+  if (!acceptAsPath) return null;
 
   if (!Platform.isDesktop) return raw;
 
@@ -62,7 +90,8 @@ export function resolveAttachmentLinks(
     out.push({ kind: 'local', path: local });
   }
 
-  const url = typeof d.url === 'string' ? d.url.trim() : '';
+  const rawUrl = typeof d.url === 'string' ? d.url.trim() : '';
+  const url = normalizeWebHref(rawUrl);
   if (/^https?:\/\//i.test(url)) {
     out.push({ kind: 'web', href: url });
   }
