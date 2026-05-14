@@ -5,6 +5,11 @@ on:
     tags:
       - '*'
 
+# Sans ceci, beaucoup de dépôts ont le GITHUB_TOKEN en lecture seule par défaut
+# et `gh release create` échoue sans créer de release.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
