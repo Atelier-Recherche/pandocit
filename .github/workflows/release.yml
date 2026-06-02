@@ -52,7 +52,6 @@ jobs:
           test -f main.js
           test -f manifest.json
           test -f styles.css
-          test -f foliate/view.js
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
@@ -69,12 +68,10 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF#refs/tags/}"
 
-          # Catalogue Obsidian : main.js, manifest, styles. foliate/ requis pour le lecteur EPUB.
-          # Le worker PDF est inclus dans main.js (gzip+base64, décompressé au runtime).
+          # Catalogue Obsidian strict : main.js, manifest.json, styles.css
           gh release create "$tag" \
             --title="$tag" \
             --notes-file="release-notes.md" \
             main.js \
             manifest.json \
-            styles.css \
-            foliate
+            styles.css
