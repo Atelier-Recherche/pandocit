@@ -206,6 +206,7 @@ body {
 
 .pwc-tooltip {
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   position: fixed;
   font-family: var(--font-interface);
   font-size: var(--pwc-tooltip-font-size);
@@ -216,13 +217,25 @@ body {
   border-radius: 6px;
   width: 95vw;
   max-width: 300px;
+  max-height: min(75dvh, calc(100dvh - 20px));
   line-height: 1.4;
   z-index: var(--layer-popover);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--size-4-2);
+  min-height: 0;
   user-select: text;
+  box-sizing: border-box;
+}
+
+.pwc-tooltip-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pwc-tooltip .csl-entry {
@@ -938,6 +951,7 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   margin-top: 0.5rem;
   padding-top: 0.4rem;
   border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
 }
 
 .pwc-tooltip-cite-btn {

@@ -9,6 +9,67 @@ import clip from 'text-clipper';
 /** Délai avant affichage d’une infobulle au survol (non exposé dans les réglages). */
 const CITATION_TOOLTIP_DELAY_MS = 400;
 
+const TOOLTIP_VIEWPORT_PAD = 10;
+const TOOLTIP_ANCHOR_GAP = 5;
+const TOOLTIP_MAX_WIDTH_DESKTOP = 300;
+const TOOLTIP_MAX_WIDTH_TAP = 340;
+
+/** Place l’infobulle dans le viewport et limite sa hauteur pour permettre le défilement. */
+function layoutCitationTooltip(
+  tooltip: HTMLElement,
+  anchor: DOMRect,
+  win: Window
+): void {
+  const vp = win.visualViewport;
+  const vw = vp?.width ?? win.innerWidth;
+  const vh = vp?.height ?? win.innerHeight;
+  const pad = TOOLTIP_VIEWPORT_PAD;
+  const maxW = Math.min(
+    citationInfoUsesTap() ? TOOLTIP_MAX_WIDTH_TAP : TOOLTIP_MAX_WIDTH_DESKTOP,
+    vw - pad * 2
+  );
+  tooltip.style.maxWidth = `${Math.max(120, maxW)}px`;
+  tooltip.style.left = '0px';
+  tooltip.style.top = '0px';
+
+  const availH = Math.max(80, vh - pad * 2);
+  tooltip.style.maxHeight = `${availH}px`;
+
+  const measure = () => tooltip.getBoundingClientRect();
+  let rect = measure();
+  const gap = TOOLTIP_ANCHOR_GAP;
+
+  let top = anchor.bottom + gap;
+  if (top + rect.height > vh - pad) {
+    const aboveTop = anchor.top - rect.height - gap;
+    if (aboveTop >= pad) {
+      top = aboveTop;
+    } else {
+      const spaceBelow = vh - pad - (anchor.bottom + gap);
+      const spaceAbove = anchor.top - gap - pad;
+      if (spaceBelow >= spaceAbove) {
+        top = anchor.bottom + gap;
+        tooltip.style.maxHeight = `${Math.max(80, spaceBelow)}px`;
+      } else {
+        top = pad;
+        tooltip.style.maxHeight = `${Math.max(80, spaceAbove)}px`;
+      }
+      rect = measure();
+    }
+  }
+
+  top = Math.max(pad, Math.min(top, vh - rect.height - pad));
+  let left = anchor.left;
+  rect = measure();
+  if (left + rect.width > vw - pad) {
+    left = vw - rect.width - pad;
+  }
+  left = Math.max(pad, left);
+
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+}
+
 /** Extrait un numéro de page typique du locator Pandoc (ex. `p78`, `pp. 12-14`). */
 function pageNumberFromLocator(loc: string): number | null {
   const m = loc.trim().match(/\d+/);
@@ -99,7 +160,8 @@ export class TooltipManager {
     }
 
     if (content) {
-      tooltip.append(content);
+      const scroll = tooltip.createDiv({ cls: 'pwc-tooltip-scroll' });
+      scroll.append(content);
       this.appendZoteroQuickActions(tooltip, el, file.path);
     } else {
       tooltip.addClass('is-missing');
@@ -126,25 +188,16 @@ export class TooltipManager {
       }
     });
 
-    el.win.setTimeout(() => {
-      const viewport = el.win.visualViewport;
-      const divRect = tooltip.getBoundingClientRect();
-
-      tooltip.style.left =
-        rect.x + divRect.width + 10 > viewport.width
-          ? `${rect.x - (rect.x + divRect.width + 10 - viewport.width)}px`
-          : `${rect.x}px`;
-      tooltip.style.top =
-        rect.bottom + divRect.height + 10 > viewport.height
-          ? `${rect.y - divRect.height - 5}px`
-          : `${rect.bottom + 5}px`;
+    el.win.requestAnimationFrame(() => {
+      layoutCitationTooltip(tooltip, rect, el.win);
     });
 
     this.isScrollBound = true;
-    this.boundScroll = () => {
-      if (this.isScrollBound) {
-        this.hideTooltip();
-      }
+    this.boundScroll = (evt: Event) => {
+      if (!this.isScrollBound) return;
+      const target = evt.target;
+      if (target instanceof Node && this.tooltip?.contains(target)) return;
+      this.hideTooltip();
     };
     el.win.addEventListener('scroll', this.boundScroll, { capture: true });
   }
