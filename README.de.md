@@ -32,9 +32,9 @@
 
 ## 📸 Vorschau
 
-| Referenzliste | Zotero-Bibliothek |
+| Referenzliste | Bibliothek |
 | :---: | :---: |
-| <img src="readme-media/screen1.jpg" alt="Formatierte Referenzen in der Seitenleiste" width="400" /> | <img src="readme-media/screen2.jpg" alt="Zotero-Bibliothekspanel" width="400" /> |
+| <img src="readme-media/screen1.jpg" alt="Formatierte Referenzen in der Seitenleiste" width="400" /> | <img src="readme-media/screen2.jpg" alt="Bibliotheksbereich" width="400" /> |
 
 ---
 
@@ -88,9 +88,9 @@ Nach Aktivierung in den Einstellungen:
 
 Die Daten werden als JSON im Plugin-Ordner gespeichert; **keine lokale Zotero-Node-Installation** — Offline-Nutzung des Vaults nach der Synchronisation möglich.
 
-### 🌳 Panel „Zotero-Bibliothek“
+### 🌳 Panel „Bibliothek“
 
-Befehl: **„Open Zotero library panel“** / **„Zotero-Bibliothekspanel öffnen“**.
+Befehl: **„Open library panel“** / **„Bibliotheksbereich öffnen“**.
 
 **Baumansicht** (Sammlungen, nicht eingeordnete Einträge, einzelne Anhänge, Papierkorb). Filter, Bearbeitung der Einträge (inkl. Zotero-HTML-Notizen), **PDF-/Datei**-Anhänge in der Zeile.
 

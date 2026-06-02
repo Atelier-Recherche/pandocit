@@ -87,6 +87,22 @@ const MARKUP_SUBTYPES = new Set([
   'Stamp',
 ]);
 
+function markupStyleFromPdfSubtype(
+  subtype: string
+): DocumentAnnotation['markupStyle'] {
+  switch (subtype) {
+    case 'Underline':
+      return 'underline';
+    case 'StrikeOut':
+      return 'strikeout';
+    case 'Squiggly':
+      return 'squiggly';
+    case 'Highlight':
+    default:
+      return 'highlight';
+  }
+}
+
 /**
  * Lit les annotations in-PDF via pdf-lib (champ NM fiable) et regroupe par NM.
  */
@@ -153,6 +169,7 @@ export async function loadInPdfAnnotations(
           pageIndex,
           pageLabel: String(pageIndex + 1),
           rects,
+          markupStyle: markupStyleFromPdfSubtype(subtype || 'Highlight'),
         });
       }
     }

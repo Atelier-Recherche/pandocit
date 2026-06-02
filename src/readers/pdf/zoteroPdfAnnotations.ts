@@ -7,6 +7,7 @@ import {
   zoteroSortIndexFromHighlight,
   colorToZoteroHex,
   zoteroAnnotationTypeFromStyle,
+  zoteroAnnotationTypeToMarkupStyle,
 } from './pdfAnnotationBridge';
 import type { PdfHighlight } from './pdfAnnotationBridge';
 import type ReferenceList from '../../main';
@@ -51,6 +52,9 @@ export function zoteroAnnotationsForAttachment(
       pageIndex: rawParsed?.pageIndex ?? pageIndex,
       rects,
       zoteroKey: st.key,
+      markupStyle: zoteroAnnotationTypeToMarkupStyle(
+        String(d.annotationType ?? 'highlight')
+      ),
     });
   }
   return out;

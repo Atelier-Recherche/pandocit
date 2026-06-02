@@ -9,8 +9,10 @@ import {
   getCSLLocale,
   getCSLStyle,
   getZBib,
+  readBibliographyFile,
   refreshZBib,
 } from './helpers';
+import { parseBibTeXFilePaths } from './bibFilePdfLinks';
 import {
   PromiseCapability,
   copyElToClipboard,
@@ -148,6 +150,8 @@ export class BibManager {
   styleCache: Map<string, string> = new Map();
 
   bibCache: Map<string, PartialCSLEntry> = new Map();
+  /** Clé API Zotero (8 car.) → id CSL / citekey (ne pas indexer dans bibCache). */
+  citekeyAliases: Map<string, string> = new Map();
   fuse: Fuse<PartialCSLEntry>;
   engine: any;
 
@@ -183,9 +187,43 @@ export class BibManager {
     this.langCache.clear();
     this.styleCache.clear();
     this.bibCache.clear();
+    this.citekeyAliases.clear();
     this.fuse = null;
     this.engine = null;
     this.plugin = null;
+  }
+
+  /** Clé canonique citeproc pour une clé de citation ou un alias Zotero. */
+  resolveBibliographyId(
+    key: string,
+    bibCache: Map<string, PartialCSLEntry> = this.bibCache
+  ): string | undefined {
+    const k = key?.trim();
+    if (!k) return undefined;
+    const direct = bibCache.get(k);
+    if (direct?.id) return direct.id;
+    const alias = this.citekeyAliases.get(k);
+    if (alias && bibCache.has(alias)) return alias;
+    return undefined;
+  }
+
+  hasBibliographyEntry(
+    key: string,
+    bibCache: Map<string, PartialCSLEntry> = this.bibCache
+  ): boolean {
+    return !!this.resolveBibliographyId(key, bibCache);
+  }
+
+  registerBibliographyEntry(
+    entry: PartialCSLEntry,
+    aliasKey?: string
+  ): void {
+    if (!entry?.id) return;
+    this.bibCache.set(entry.id, entry);
+    const alias = aliasKey?.trim();
+    if (alias && alias !== entry.id) {
+      this.citekeyAliases.set(alias, entry.id);
+    }
   }
 
   clearWatcher(path: string) {
@@ -198,7 +236,10 @@ export class BibManager {
   async reinit(clearCache: boolean) {
     this.initPromise = new PromiseCapability();
     this.fileCache.clear();
-    if (clearCache) this.bibCache.clear();
+    if (clearCache) {
+      this.bibCache.clear();
+      this.citekeyAliases.clear();
+    }
 
     if (this.plugin.settings.pullFromZoteroApi) {
       await this.loadGlobalZoteroApi();
@@ -206,7 +247,87 @@ export class BibManager {
       await this.loadGlobalBibFile(true);
     }
 
+    if (!this.engine && this.bibCache.size > 0) {
+      await this.ensureGlobalEngine();
+    }
+
+    this.fileCache.clear();
     this.initPromise.resolve();
+  }
+
+  /** Reconstruit citeproc si le cache bibliographie est prêt mais pas le moteur. */
+  async ensureGlobalEngine(): Promise<boolean> {
+    if (this.engine) return true;
+    const { settings } = this.plugin;
+    const style =
+      settings.cslStylePath ||
+      settings.cslStyleURL ||
+      'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+    const lang = settings.cslLang || 'en-US';
+    const styleKey = settings.cslStylePath || style;
+
+    await this.getLangAndStyle(lang, {
+      id: style,
+      explicitPath: settings.cslStylePath,
+    });
+    if (!this.styleCache.has(styleKey) || this.bibCache.size === 0) {
+      return false;
+    }
+    try {
+      this.engine = this.buildEngine(
+        lang,
+        this.langCache,
+        styleKey,
+        this.styleCache,
+        this.bibCache
+      );
+      return !!this.engine;
+    } catch (e) {
+      console.error('[PandoCit] ensureGlobalEngine', e);
+      return false;
+    }
+  }
+
+  /**
+   * Remplit `zCitekeyToPDFLinks` depuis les champs `file` d'un `.bib` (export BBT, etc.).
+   * La résolution coffre se fait à l'ouverture (même logique que Zotero).
+   */
+  async mergePdfLinksFromBibliographyFile(
+    bibPath: string | undefined,
+    opts?: { replace?: boolean }
+  ): Promise<void> {
+    const trimmed = bibPath?.trim();
+    if (!trimmed) return;
+
+    const ext = getPath().extname(trimmed).toLowerCase();
+    if (ext !== '.bib' && ext !== '.bibtex') return;
+
+    try {
+      const contents = await readBibliographyFile(trimmed, getVaultRoot);
+      const parsed = parseBibTeXFilePaths(contents);
+
+      if (opts?.replace) {
+        this.zCitekeyToPDFLinks.clear();
+      }
+
+      const pushPath = (citekey: string, filePath: string) => {
+        const arr = this.zCitekeyToPDFLinks.get(citekey) ?? [];
+        if (!arr.includes(filePath)) arr.push(filePath);
+        this.zCitekeyToPDFLinks.set(citekey, arr);
+      };
+
+      for (const [citekey, paths] of parsed) {
+        for (const filePath of paths) {
+          pushPath(citekey, filePath);
+          const csl = this.bibCache.get(citekey);
+          if (csl?.id && csl.id !== citekey) {
+            pushPath(csl.id, filePath);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[PandoCit] Could not read bibliography file= paths', e);
+    }
   }
 
   setFuse(data: PartialCSLEntry[] = []) {
@@ -234,7 +355,8 @@ export class BibManager {
 
     const pluginSettings = this.plugin.settings;
     let style =
-      pluginSettings.cslStyleURL ??
+      pluginSettings.cslStylePath ||
+      pluginSettings.cslStyleURL ||
       'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
     let lang = pluginSettings.cslLang ?? 'en-US';
     let bibCache = this.bibCache;
@@ -271,24 +393,52 @@ export class BibManager {
     if (settings.bibliography) {
       try {
         const bib = await bibToCSL(settings.bibliography, getVaultRoot);
-        bibCache = new Map();
 
-        for (const entry of bib) {
-          bibCache.set(entry.id, entry);
+        if (pluginSettings.pullFromZoteroApi) {
+          for (const entry of bib) {
+            this.bibCache.set(entry.id, entry);
+          }
+          bibCache = this.bibCache;
+          if (this.fuse) {
+            for (const entry of bib) {
+              this.fuse.add(entry);
+            }
+          } else {
+            fuse = new Fuse(Array.from(this.bibCache.values()), fuseSettings);
+          }
+        } else {
+          bibCache = new Map();
+          for (const entry of bib) {
+            bibCache.set(entry.id, entry);
+          }
+          fuse = new Fuse(bib, fuseSettings);
         }
 
-        fuse = new Fuse(bib, fuseSettings);
+        await this.mergePdfLinksFromBibliographyFile(settings.bibliography, {
+          replace: false,
+        });
       } catch (e) {
         console.error(e);
         return this;
       }
     }
 
+    const styleKey = pluginSettings.cslStylePath || style;
+    if (!this.styleCache.has(styleKey)) {
+      await this.getLangAndStyle(lang, {
+        id: style,
+        explicitPath: pluginSettings.cslStylePath,
+      });
+    }
+
     try {
+      if (!this.styleCache.has(styleKey)) {
+        return this;
+      }
       const engine = this.buildEngine(
         lang,
         this.langCache,
-        style,
+        styleKey,
         this.styleCache,
         bibCache
       );
@@ -308,6 +458,15 @@ export class BibManager {
     const { settings } = this.plugin;
 
     if (!settings.pathToBibliography) return;
+
+    /** Avec l’API Zotero, le .bib ne remplace pas bibCache (sinon les tooltips perdent les clés). */
+    if (settings.pullFromZoteroApi) {
+      await this.mergePdfLinksFromBibliographyFile(settings.pathToBibliography, {
+        replace: false,
+      });
+      return;
+    }
+
     if (!fromCache || this.bibCache.size === 0) {
       const bib = await bibToCSL(settings.pathToBibliography, getVaultRoot);
 
@@ -340,7 +499,12 @@ export class BibManager {
       }
 
       this.setFuse(bib);
+
     }
+
+    await this.mergePdfLinksFromBibliographyFile(settings.pathToBibliography, {
+      replace: !this.plugin.settings.pullFromZoteroApi,
+    });
 
     const style =
       settings.cslStylePath ||
@@ -352,13 +516,14 @@ export class BibManager {
       id: style,
       explicitPath: settings.cslStylePath,
     });
-    if (!this.styleCache.has(style)) return;
+    const styleKey = settings.cslStylePath || style;
+    if (!this.styleCache.has(styleKey)) return;
 
     try {
       this.engine = this.buildEngine(
         lang,
         this.langCache,
-        style,
+        styleKey,
         this.styleCache,
         this.bibCache
       );
@@ -387,6 +552,7 @@ export class BibManager {
     this.zCitekeyToLinks.clear();
     this.zCitekeyToPDFLinks.clear();
     this.zCitekeyToWebLinks.clear();
+    this.citekeyAliases.clear();
 
     this.bibCache = new Map();
 
@@ -394,8 +560,7 @@ export class BibManager {
       const csl = zoteroItemToCsl(st, groupID);
       if (csl) {
         bib.push(csl);
-        this.bibCache.set(csl.id, csl);
-        if (st.key !== csl.id) this.bibCache.set(st.key, csl);
+        this.registerBibliographyEntry(csl, st.key);
       }
       const link = zoteroUriForStorageKey(st.key, settings);
       if (link) {
@@ -452,6 +617,11 @@ export class BibManager {
       if (parentSt.key && parentSt.key !== csl.id) pushPdf(parentSt.key);
     }
 
+    await this.mergePdfLinksFromBibliographyFile(
+      this.plugin.settings.pathToBibliography,
+      { replace: false }
+    );
+
     this.setFuse(bib);
 
     const style =
@@ -464,13 +634,14 @@ export class BibManager {
       id: style,
       explicitPath: settings.cslStylePath,
     });
-    if (!this.styleCache.has(style)) return;
+    const styleKey = settings.cslStylePath || style;
+    if (!this.styleCache.has(styleKey)) return;
 
     try {
       this.engine = this.buildEngine(
         lang,
         this.langCache,
-        style,
+        styleKey,
         this.styleCache,
         this.bibCache
       );
@@ -521,13 +692,14 @@ export class BibManager {
       id: style,
       explicitPath: settings.cslStylePath,
     });
-    if (!this.styleCache.has(style)) return;
+    const styleKey = settings.cslStylePath || style;
+    if (!this.styleCache.has(styleKey)) return;
 
     try {
       this.engine = this.buildEngine(
         lang,
         this.langCache,
-        style,
+        styleKey,
         this.styleCache,
         this.bibCache
       );
@@ -597,7 +769,8 @@ export class BibManager {
           return langCache.get(id);
         },
         retrieveItem: (id: string) => {
-          return bibCache.get(id);
+          const canonical = this.resolveBibliographyId(id, bibCache);
+          return canonical ? bibCache.get(canonical) : undefined;
         },
       },
       styleXML,
@@ -743,10 +916,23 @@ export class BibManager {
       this.clearWatcher(cachedDoc.settings.bibliography);
     }
 
-    const source =
+    let source =
       cachedDoc?.source && areSettingsEqual
         ? cachedDoc.source
         : await this.loadScopedEngine(settings);
+
+    if (!source?.engine) {
+      if (!this.engine) {
+        await this.ensureGlobalEngine();
+      }
+      if (this.engine) {
+        source = {
+          bibCache: this.bibCache,
+          fuse: this.fuse,
+          engine: this.engine,
+        };
+      }
+    }
 
     if (isDesktop() && settings?.bibliography) {
       const bibPath = getBibPath(settings.bibliography, getVaultRoot);
@@ -793,7 +979,7 @@ export class BibManager {
     }
 
     citeKeys.forEach((k) => {
-      if (source.bibCache.has(k)) {
+      if (this.hasBibliographyEntry(k, source.bibCache)) {
         resolvedKeys.add(k);
       } else {
         unresolvedKeys.add(k);
@@ -802,7 +988,7 @@ export class BibManager {
 
     const filtered = processed.filter((s) =>
       s.citations.every((c) => {
-        const resolved = source.bibCache.has(c.id);
+        const resolved = this.hasBibliographyEntry(c.id, source.bibCache);
         if (resolved) {
           resolvedKeys.add(c.id);
         } else {
@@ -812,10 +998,22 @@ export class BibManager {
       })
     );
 
-    // Do we need this?
-    // source.engine.updateItems(Array.from(resolvedKeys));
+    const normalizedFiltered = filtered.map((seg) => ({
+      ...seg,
+      citations: seg.citations.map((c) => ({
+        ...c,
+        id:
+          this.resolveBibliographyId(c.id, source.bibCache) ?? c.id,
+      })),
+    }));
 
-    const citations = cite(source.engine, filtered);
+    let citations: ReturnType<typeof cite>;
+    try {
+      citations = cite(source.engine, normalizedFiltered);
+    } catch (e) {
+      console.error('[PandoCit] citeproc cite failed', e);
+      return setNull();
+    }
 
     if (
       cachedDoc &&
@@ -825,7 +1023,13 @@ export class BibManager {
       return cachedDoc.bib;
     }
 
-    const bib = source.engine.makeBibliography();
+    let bib: ReturnType<typeof source.engine.makeBibliography>;
+    try {
+      bib = source.engine.makeBibliography();
+    } catch (e) {
+      console.error('[PandoCit] citeproc makeBibliography failed', e);
+      return setNull();
+    }
 
     if (!bib?.length) {
       return setNull();

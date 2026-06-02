@@ -35,7 +35,7 @@ export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
   return orig;
 }
 
-async function readBibliographyFile(
+export async function readBibliographyFile(
   bibPath: string,
   getVaultRoot?: () => string
 ): Promise<string> {

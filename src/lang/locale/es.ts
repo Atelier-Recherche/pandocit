@@ -50,8 +50,11 @@ export default {
   'Set the amount of time (in milliseconds) to wait before displaying tooltips.':
     'Tiempo de espera en milisegundos antes del tooltip.',
   'Open PDF links in new tab': 'Abrir PDF en una pestaña nueva',
+  'When enabled, vault PDFs opened from citekey tooltips or the library panel open in a new tab. When disabled, Obsidian may split the current pane instead.':
+    'Si está activado, los PDF del cofre abiertos desde tooltips o el panel Biblioteca se abren en una pestaña nueva. Si no, Obsidian puede dividir el panel.',
   'When enabled, vault PDFs opened from citekey tooltips or the Zotero library open in a new tab. When disabled, Obsidian may split the current pane instead.':
-    'Si está activado, los PDF del cofre abiertos desde tooltips o el panel Zotero se abren en una pestaña nueva. Si no, Obsidian puede dividir el panel.',
+    'Si está activado, los PDF del cofre abiertos desde tooltips o el panel Biblioteca se abren en una pestaña nueva. Si no, Obsidian puede dividir el panel.',
+  'Searching library and bibliography': 'Buscando en biblioteca y archivo de bibliografía…',
   'Validate Pandoc configuration': 'Validar configuración de Pandoc',
   Validate: 'Validar',
   'Validation successful': 'Validación correcta',
@@ -78,6 +81,15 @@ export default {
   'No citations found in the current document.':
     'No hay citas en el documento actual.',
   References: 'Referencias',
+  Library: 'Biblioteca',
+  Annotations: 'Anotaciones',
+  'Bibliography file': 'Archivo de bibliografía',
+  'Reload bibliography file': 'Recargar archivo de bibliografía',
+  'Bibliography reloaded': 'Bibliografía recargada',
+  'No library entries': 'No hay entradas en la biblioteca',
+  'Set a bibliography file path or enable Zotero Web API in plugin settings':
+    'Indique una ruta de bibliografía o active la API web de Zotero en los ajustes del plugin',
+  'Badge BibTeX entry': 'BibTeX',
   'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.':
     'Se puede sobrescribir por nota con «lang» o «citation-language» en metadatos (código de idioma obligatorio).',
   'See here for a list of available language codes':
@@ -195,7 +207,6 @@ export default {
     'Requiere acceso a la biblioteca y permiso de escritura.',
   'Could not validate API key': 'No se pudo validar la clave API',
   'API key OK': 'Clave API correcta',
-  Library: 'Biblioteca',
   'User library or a group library.': 'Biblioteca personal o de grupo.',
   'My library': 'Mi biblioteca',
   'Group library': 'Biblioteca de grupo',
@@ -211,7 +222,9 @@ export default {
   'Download remote changes and upload local edits.':
     'Descarga cambios remotos y sube ediciones locales.',
   'Sync Zotero library (Web API)': 'Sincronizar biblioteca Zotero (API)',
-  'Open Zotero library panel': 'Abrir panel biblioteca Zotero',
+  'Open Zotero library panel': 'Abrir panel de biblioteca',
+  'Open library panel': 'Abrir panel de biblioteca',
+  'Open annotations panel': 'Abrir panel de anotaciones',
   'Zotero library has no items — run Sync':
     'La biblioteca Zotero está vacía — ejecute sincronización',
   'Enable “Use Zotero Web API” in plugin settings first':

@@ -3,7 +3,6 @@ import { TFile, type WorkspaceLeaf } from 'obsidian';
 import type ReferenceList from '../main';
 import { pdfReaderViewType } from './pdf/PdfReaderView';
 import { epubReaderViewType } from './epub/EpubReaderView';
-import { resolveDocumentOpenMode } from './openDocument';
 import { refreshPdfPanelAnnotations } from './pdf/pdfPanelAnnotations';
 import { registerPdfNativeViewerUi } from './pdf/pdfNativeViewerUi';
 import { scheduleZoteroOverlayRender } from './pdf/zoteroPdfOverlay';
@@ -26,12 +25,12 @@ export function vaultPathFromViewState(state: unknown): string | null {
   return null;
 }
 
+/** PDF : lecteur Obsidian natif. EPUB : vue PandoCit (Obsidian n’a pas de lecteur EPUB). */
 export function shouldUsePandocitReader(
-  plugin: ReferenceList,
+  _plugin: ReferenceList,
   kind: DocumentKind
 ): boolean {
-  if (kind === 'pdf') return false;
-  return resolveDocumentOpenMode(plugin, kind) === 'pandocit';
+  return kind === 'epub';
 }
 
 /**

@@ -32,7 +32,7 @@
 
 ## 📸 Vista previa
 
-| Lista de referencias | Biblioteca Zotero |
+| Lista de referencias | Biblioteca |
 | :---: | :---: |
 | <img src="readme-media/screen1.jpg" alt="Panel de referencias formateadas" width="400" /> | <img src="readme-media/screen2.jpg" alt="Panel biblioteca Zotero" width="400" /> |
 
@@ -88,9 +88,9 @@ Una vez activada en los ajustes:
 
 Los datos se almacenan en JSON en la carpeta del plugin; **no se requiere Node local de Zotero** — uso sin conexión del cofre tras la sincronización.
 
-### 🌳 Panel « Biblioteca Zotero »
+### 🌳 Panel « Biblioteca »
 
-Comando: **« Open Zotero library panel »** / **« Abrir panel biblioteca Zotero »**.
+Comando: **« Open library panel »** / **« Abrir panel de biblioteca »**.
 
 Vista **en árbol** (colecciones, elementos sin clasificar, adjuntos sueltos, papelera). Filtro, edición de fichas (notas HTML Zotero), adjuntos **PDF / archivos** en la fila.
 

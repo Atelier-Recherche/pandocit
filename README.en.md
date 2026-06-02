@@ -32,9 +32,9 @@
 
 ## 📸 Preview
 
-| Reference list | Zotero library |
+| Reference list | Library |
 | :---: | :---: |
-| <img src="readme-media/screen1.jpg" alt="Formatted reference sidebar" width="400" /> | <img src="readme-media/screen2.jpg" alt="Zotero library panel" width="400" /> |
+| <img src="readme-media/screen1.jpg" alt="Formatted reference sidebar" width="400" /> | <img src="readme-media/screen2.jpg" alt="Library panel" width="400" /> |
 
 ---
 
@@ -90,9 +90,9 @@ When enabled in settings:
 
 Data is stored as JSON in the plugin folder; **no local Zotero Node install** — offline vault use after sync.
 
-### 🌳 “Zotero library” panel
+### 🌳 “Library” panel
 
-Command: **“Open Zotero library panel”**.
+Command: **“Open library panel”**.
 
 **Tree view** (collections, unfiled items, standalone attachments, trash). Filter, edit items (including Zotero HTML notes), **PDF / file** attachments on each row.
 
@@ -107,7 +107,7 @@ Command **“Import vault PDF folder to Zotero”**: recursive scan, duplicate d
 
 ## 📄 Built-in PDF reader
 
-- Open from vault (Obsidian native or PandoCit reader, per settings).
+- Open PDFs from the vault in Obsidian's native PDF reader.
 - **Highlights** to PDF and/or **Zotero** (Web API), saved styles, context menu.
 - **Annotations panel**: unified list, Pandoc reference copy (`> quote`, Obsidian link, `[@citekey]`).
 - Sync with Zotero attachments linked to vault files.

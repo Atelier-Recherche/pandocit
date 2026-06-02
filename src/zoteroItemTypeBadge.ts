@@ -44,6 +44,7 @@ const ITEM_TYPE_I18N: Partial<Record<string, EnKey>> = {
   tvBroadcast: 'Zotero type tvBroadcast',
   videoRecording: 'Zotero type videoRecording',
   webpage: 'Zotero type webpage',
+  bibFileEntry: 'Badge BibTeX entry',
 };
 
 function humanizeApiItemType(it: string): string {

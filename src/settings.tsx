@@ -11,13 +11,8 @@ import ReferenceList from './main';
 import ReactDOM from 'react-dom';
 import React from 'react';
 import { SettingItem } from './settings/SettingItem';
-import AsyncSelect from 'react-select/async';
-import {
-  NoOptionMessage,
-  customSelectStyles,
-  loadCSLLangOptions,
-  loadCSLOptions,
-} from './settings/select.helpers';
+import { CslSearchField } from './settings/CslSearchField';
+import { searchCSL, searchCSLLangs } from './settings/select.helpers';
 import { cslListRaw } from './bib/cslList';
 import { langListRaw } from './bib/cslLangList';
 import { ZoteroApiSetting } from './settings/ZoteroApiSetting';
@@ -30,19 +25,21 @@ import {
   isPdfWorkerInstalled,
 } from './pdfWorkerInstall';
 import { setPluginUiLocale } from './lang/helpers';
-
-export type DocumentOpenMode = 'obsidian' | 'pandocit' | 'ask';
+import {
+  isFormattedCitationsEnabled,
+  setFormattedCitationsEnabled,
+  syncCitationUiClasses,
+} from './citationUi';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
   pluginUiLocale: 'en',
-  tooltipDelay: 400,
   zoteroGroups: [],
   renderCitations: true,
   renderCitationsReadingMode: true,
   renderLinkCitations: true,
   openPdfLinksInNewTab: true,
-  pdfOpenMode: 'obsidian',
-  epubOpenMode: 'obsidian',
+  showCitekeyTooltips: true,
+  underlineCitekeys: false,
   zoteroApiLibraryType: 'user',
   zoteroApiMergeGroupIds: [],
 };
@@ -64,16 +61,16 @@ export interface ReferenceListSettings {
   cslLang?: string;
 
   hideLinks?: boolean;
+  /** Infobulles au survol des clés / citations (toujours recommandé). */
   showCitekeyTooltips?: boolean;
-  tooltipDelay: number;
+  /** Soulignement pointillé des clés de citation résolues. */
+  underlineCitekeys?: boolean;
   enableCiteKeyCompletion?: boolean;
   renderCitations?: boolean;
   renderCitationsReadingMode?: boolean;
   renderLinkCitations?: boolean;
   /** PDF du coffre ouverts via citekeys / panneau Zotero : nouvel onglet si true, sinon même zone (vue scindée possible). */
   openPdfLinksInNewTab?: boolean;
-  pdfOpenMode?: DocumentOpenMode;
-  epubOpenMode?: DocumentOpenMode;
   hypothesisApiToken?: string;
   hypothesisGroup?: string;
   /** Derniers réglages de surlignage PDF (style, cible, couleur, opacité). */
@@ -270,22 +267,20 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     );
 
     ReactDOM.render(
-      <SettingItem name={t('Citation style')}>
-        <AsyncSelect
-          noOptionsMessage={NoOptionMessage}
-          placeholder={t('Search...')}
-          cacheOptions
-          className="pwc-multiselect"
-          defaultValue={defaultStyle}
-          loadOptions={loadCSLOptions}
-          isClearable
-          onChange={(selection: any) => {
+      <SettingItem
+        name={t('Citation style')}
+        description={t('Type to search CSL styles (e.g. apa, chicago).')}
+      >
+        <CslSearchField
+          initialOption={defaultStyle ?? null}
+          placeholder={t('Search CSL styles…')}
+          search={searchCSL}
+          onSelect={(selection) => {
             this.plugin.settings.cslStyleURL = selection?.value;
             this.plugin.saveSettings(() =>
               this.plugin.bibManager.reinit(false)
             );
           }}
-          styles={customSelectStyles}
         />
       </SettingItem>,
       containerEl.createDiv('pwc-setting-item setting-item')
@@ -364,21 +359,18 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           </>
         }
       >
-        <AsyncSelect
-          noOptionsMessage={NoOptionMessage}
-          placeholder={t('Search...')}
-          cacheOptions
-          className="pwc-multiselect"
-          defaultValue={defaultLanguage}
-          loadOptions={loadCSLLangOptions}
-          isClearable
-          onChange={(selection: any) => {
-            this.plugin.settings.cslLang = selection.value;
+        <CslSearchField
+          initialOption={defaultLanguage ?? null}
+          placeholder={t('Search languages…')}
+          search={searchCSLLangs}
+          listOnEmptyFocus
+          emptyNoMatch={t('No matching languages')}
+          onSelect={(selection) => {
+            this.plugin.settings.cslLang = selection?.value ?? '';
             this.plugin.saveSettings(() =>
               this.plugin.bibManager.reinit(false)
             );
           }}
-          styles={customSelectStyles}
         />
       </SettingItem>,
       containerEl.createDiv('pwc-setting-item setting-item')
@@ -395,36 +387,32 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(t('Render live preview inline citations'))
-      .setDesc(
-        t(
-          'Convert [@pandoc] citations to formatted inline citations in live preview mode.'
-        )
-      )
+      .setName(t('Underline citekeys'))
+      .setDesc(t('Dotted underline on resolved and unresolved citekeys in the editor.'))
       .addToggle((text) =>
         text
-          .setValue(!!this.plugin.settings.renderCitations)
+          .setValue(!!this.plugin.settings.underlineCitekeys)
           .onChange((value) => {
-            this.plugin.settings.renderCitations = value;
+            this.plugin.settings.underlineCitekeys = value;
             this.plugin.saveSettings();
           })
       );
 
     new Setting(containerEl)
-      .setName(t('Render reading mode inline citations'))
+      .setName(t('Formatted inline citations'))
       .setDesc(
         t(
-          'Convert [@pandoc] citations to formatted inline citations in reading mode.'
+          'Replace [@citekey] with author–year (or your CSL style). When off, the citekey stays visible; hover tooltips still work.'
         )
       )
-      .addToggle((text) =>
+      .addToggle((text) => {
         text
-          .setValue(!!this.plugin.settings.renderCitationsReadingMode)
+          .setValue(isFormattedCitationsEnabled(this.plugin.settings))
           .onChange((value) => {
-            this.plugin.settings.renderCitationsReadingMode = value;
+            setFormattedCitationsEnabled(this.plugin.settings, value);
             this.plugin.saveSettings();
-          })
-      );
+          });
+      });
 
     new Setting(containerEl)
       .setName(t('Process citations in links'))
@@ -459,44 +447,10 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(t('Show citekey tooltips'))
-      .setDesc(
-        t(
-          'When enabled, hovering over citekeys will open a tooltip containing a formatted citation.'
-        )
-      )
-      .addToggle((text) =>
-        text
-          .setValue(!!this.plugin.settings.showCitekeyTooltips)
-          .onChange((value) => {
-            this.plugin.settings.showCitekeyTooltips = value;
-            this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(t('Tooltip delay'))
-      .setDesc(
-        t(
-          'Set the amount of time (in milliseconds) to wait before displaying tooltips.'
-        )
-      )
-      .addSlider((slider) => {
-        slider
-          .setDynamicTooltip()
-          .setLimits(0, 7000, 100)
-          .setValue(this.plugin.settings.tooltipDelay)
-          .onChange((value) => {
-            this.plugin.settings.tooltipDelay = value;
-            this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
       .setName(t('Open PDF links in new tab'))
       .setDesc(
         t(
-          'When enabled, vault PDFs opened from citekey tooltips or the Zotero library open in a new tab. When disabled, Obsidian may split the current pane instead.'
+          'When enabled, vault PDFs opened from citekey tooltips or the library panel open in a new tab. When disabled, Obsidian may split the current pane instead.'
         )
       )
       .addToggle((toggle) =>
@@ -507,28 +461,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             this.plugin.saveSettings();
           })
       );
-
-    const addDocMode = (kind: 'pdf' | 'epub', label: string) => {
-      new Setting(containerEl)
-        .setName(label)
-        .addDropdown((dd) => {
-          dd.addOption('obsidian', 'Obsidian')
-            .addOption('pandocit', 'PandoCit')
-            .addOption('ask', t('Ask each time'));
-          const cur =
-            kind === 'pdf'
-              ? this.plugin.settings.pdfOpenMode ?? 'obsidian'
-              : this.plugin.settings.epubOpenMode ?? 'obsidian';
-          dd.setValue(cur).onChange((v) => {
-            const mode = v as DocumentOpenMode;
-            if (kind === 'pdf') this.plugin.settings.pdfOpenMode = mode;
-            else this.plugin.settings.epubOpenMode = mode;
-            this.plugin.saveSettings();
-          });
-        });
-    };
-    addDocMode('pdf', t('PDF open mode'));
-    addDocMode('epub', t('EPUB open mode'));
 
     new Setting(containerEl)
       .setName(t('Hypothesis API token'))

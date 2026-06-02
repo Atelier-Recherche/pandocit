@@ -32,7 +32,7 @@
 
 ## 📸 Aperçu
 
-| Liste des références | Bibliothèque Zotero |
+| Liste des références | Bibliothèque |
 | :---: | :---: |
 | <img src="readme-media/screen1.jpg" alt="Panneau des références formatées" width="400" /> | <img src="readme-media/screen2.jpg" alt="Panneau bibliothèque Zotero" width="400" /> |
 
@@ -90,9 +90,9 @@ Une fois activée dans les réglages :
 
 Les données sont stockées en JSON dans le dossier du plugin ; **aucun Node local Zotero** n’est requis — usage hors ligne possible après synchro.
 
-### 🌳 Panneau « Bibliothèque Zotero »
+### 🌳 Panneau « Bibliothèque »
 
-Commande : **« Open Zotero library panel »** / **« Ouvrir le panneau bibliothèque Zotero »**.
+Commande : **« Open library panel »** / **« Ouvrir le panneau bibliothèque »**.
 
 Vue **arborescente** (collections, éléments sans classe, pièces isolées, corbeille). Filtre, édition des notices (notes HTML Zotero), pièces jointes **PDF / fichiers** sur la ligne.
 
@@ -107,7 +107,7 @@ Commande **« Importer un dossier PDF vers Zotero »** (panneau bibliothèque ou
 
 ## 📄 Lecteur PDF intégré
 
-- Ouverture via le coffre (Obsidian natif ou lecteur PandoCit, selon réglages).
+- Ouverture des PDF via le coffre dans le lecteur Obsidian natif.
 - **Surlignage** dans le PDF et/ou **Zotero** (API Web), avec styles mémorisés et menu contextuel.
 - **Panneau annotations** : liste unifiée (PDF, Zotero), copie de référence Pandoc (`> texte`, lien Obsidian, `[@citekey]`).
 - Synchronisation des surlignages avec les pièces jointes Zotero liées au fichier du coffre.
@@ -151,6 +151,7 @@ Token API et groupe dans les réglages. **Import** des annotations Hypothesis ve
 **Autres idées**
 
 - **Insertion de citation (commande palette)** : recherche élégante sur la bibliographie déjà chargée (titre, auteur, clé), aperçu formaté citeproc, choix du format d’insertion (`[@clef]`, note inline `^[…]`, etc.) — **sans exiger Zotero installé** ; le flux BBT/CAYW reste un raccourci optionnel pour qui l’utilise déjà, pas une dépendance du plugin.
+- **Renommage de clé de citation** : modifier une `citekey` (import PDF, bibliothèque Zotero, notice) et proposer de **mettre à jour toutes les occurrences** dans le coffre (`[@ancienne]`, `@ancienne`, liens `[[@…]]`, notes de bas de page, etc.) avec aperçu des fichiers touchés avant validation.
 - Recherche globale dans les annotations (tous documents ouverts récemment).
 - Export groupé des références d’une session de lecture.
 - Rappel de synchronisation Zotero avant export `.bib`.

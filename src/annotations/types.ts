@@ -17,6 +17,8 @@ export interface DocumentAnnotation {
   created?: string;
   /** PDF rects in page space */
   rects?: Array<{ x: number; y: number; width: number; height: number }>;
+  /** Rendu PDF : surlignage, soulignement, barré, ondulé */
+  markupStyle?: 'highlight' | 'underline' | 'strikeout' | 'squiggly';
 }
 
 export interface ZoteroAnnotationRow {

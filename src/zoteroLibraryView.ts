@@ -36,6 +36,12 @@ import {
 } from './annotations/annotationReference';
 import { buildAnnotationRowsFromSnapshot } from './annotations/zoteroAnnotationIndex';
 import type { ZoteroAnnotationRow } from './annotations/types';
+import { listBibliographyEntriesFromCache } from './bib/bibliographyEntries';
+import {
+  bibFileAttachmentsFromPaths,
+  bibliographyRowFromEntry,
+  isBibliographyFileRow,
+} from './library/libraryBibRows';
 
 /** @deprecated Legacy view type — migrated to shell */
 export const zoteroLibraryViewType = 'pwc-zotero-library-view';
@@ -125,6 +131,11 @@ export class ZoteroLibraryPanel {
   private attachmentChildrenByParent = new Map<string, StoredZoteroItem[]>();
   private annotationFilterAttachmentKey: string | null = null;
   private annotationFilterAttachmentLabel = '';
+  private syncBtn: HTMLButtonElement;
+  private importPdfBtn: HTMLButtonElement;
+  private bibExportBtn: HTMLButtonElement;
+  private reloadBibBtn: HTMLButtonElement;
+  private annSearchLabel: HTMLElement;
 
   constructor(host: HTMLElement, plugin: ReferenceList) {
     this.plugin = plugin;
@@ -138,7 +149,7 @@ export class ZoteroLibraryPanel {
     });
     headingRow.createEl('h4', {
       cls: 'pwc-zotero-library__heading',
-      text: t('Zotero library'),
+      text: t('Library'),
     });
     const headActions = headingRow.createDiv({
       cls: 'pwc-zotero-library__heading-actions',
@@ -151,13 +162,13 @@ export class ZoteroLibraryPanel {
       cls: 'pwc-zotero-library__filter',
       attr: { placeholder: t('Filter references…') },
     });
-    const annLabel = searchWrap.createEl('label', {
+    this.annSearchLabel = searchWrap.createEl('label', {
       cls: 'pwc-zotero-library__ann-search-label',
     });
-    this.searchAnnotationsToggle = annLabel.createEl('input', {
+    this.searchAnnotationsToggle = this.annSearchLabel.createEl('input', {
       type: 'checkbox',
     });
-    annLabel.createSpan({ text: t('Search Zotero annotations') });
+    this.annSearchLabel.createSpan({ text: t('Search Zotero annotations') });
     let debounceTimer = 0;
     const scheduleRender = () => {
       window.clearTimeout(debounceTimer);
@@ -166,13 +177,13 @@ export class ZoteroLibraryPanel {
     this.filterInput.addEventListener('input', scheduleRender);
     this.searchAnnotationsToggle.addEventListener('change', scheduleRender);
 
-    const syncBtn = headActions.createEl('button', {
+    this.syncBtn = headActions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__head-btn',
       attr: { type: 'button', 'aria-label': t('Sync now'), title: t('Sync now') },
     });
-    setIcon(syncBtn, 'refresh-ccw');
-    syncBtn.addEventListener('click', async () => {
-      syncBtn.disabled = true;
+    setIcon(this.syncBtn, 'refresh-ccw');
+    this.syncBtn.addEventListener('click', async () => {
+      this.syncBtn.disabled = true;
       try {
         const { noticeSyncResult } = await import('./zoteroApi/zoteroSync');
         const r = await this.plugin.zoteroSync.sync();
@@ -182,11 +193,11 @@ export class ZoteroLibraryPanel {
         this.plugin.processReferences();
         await this.refreshList();
       } finally {
-        syncBtn.disabled = false;
+        this.syncBtn.disabled = false;
       }
     });
 
-    const importPdfBtn = headActions.createEl('button', {
+    this.importPdfBtn = headActions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__head-btn',
       attr: {
         type: 'button',
@@ -194,12 +205,12 @@ export class ZoteroLibraryPanel {
         title: t('Import vault PDF folder'),
       },
     });
-    setIcon(importPdfBtn, 'folder-input');
-    importPdfBtn.addEventListener('click', () => {
+    setIcon(this.importPdfBtn, 'folder-input');
+    this.importPdfBtn.addEventListener('click', () => {
       openVaultPdfImportModal(this.plugin);
     });
 
-    const bibBtn = headActions.createEl('button', {
+    this.bibExportBtn = headActions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__head-btn',
       attr: {
         type: 'button',
@@ -207,8 +218,8 @@ export class ZoteroLibraryPanel {
         title: t('Export .bib'),
       },
     });
-    setIcon(bibBtn, 'book-marked');
-    bibBtn.addEventListener('click', async () => {
+    setIcon(this.bibExportBtn, 'book-marked');
+    this.bibExportBtn.addEventListener('click', async () => {
       const p = this.plugin.settings.zoteroApiBibExportPath?.trim();
       if (!p) {
         new Notice(t('Set the BibTeX path in Zotero Web API settings'));
@@ -229,6 +240,38 @@ export class ZoteroLibraryPanel {
         new Notice(t('Path must end with .bib'));
       } else {
         new Notice(`${t('Export failed')}: ${res.error ?? ''}`);
+      }
+    });
+
+    this.reloadBibBtn = headActions.createEl('button', {
+      cls: 'clickable-icon pwc-zotero-library__head-btn',
+      attr: {
+        type: 'button',
+        'aria-label': t('Reload bibliography file'),
+        title: t('Reload bibliography file'),
+      },
+    });
+    setIcon(this.reloadBibBtn, 'book-open');
+    this.reloadBibBtn.addEventListener('click', async () => {
+      this.reloadBibBtn.disabled = true;
+      try {
+        const bibPath = this.plugin.settings.pathToBibliography?.trim();
+        if (this.plugin.settings.pullFromZoteroApi) {
+          if (bibPath) {
+            await this.plugin.bibManager.mergePdfLinksFromBibliographyFile(
+              bibPath,
+              { replace: true }
+            );
+          }
+        } else {
+          await this.plugin.bibManager.loadGlobalBibFile();
+        }
+        this.plugin.bibManager.fileCache.clear();
+        this.plugin.processReferences();
+        await this.refreshList();
+        new Notice(t('Bibliography reloaded'));
+      } finally {
+        this.reloadBibBtn.disabled = false;
       }
     });
 
@@ -459,14 +502,87 @@ export class ZoteroLibraryPanel {
     return out;
   }
 
-  async refreshList() {
+  private updateLibraryModeUi(): void {
+    const hasZotero = !!this.plugin.settings.pullFromZoteroApi;
+    const hasBib = !!this.plugin.settings.pathToBibliography?.trim();
+    this.syncBtn?.toggleClass('is-hidden', !hasZotero);
+    this.importPdfBtn?.toggleClass('is-hidden', !hasZotero);
+    this.bibExportBtn?.toggleClass('is-hidden', !hasZotero);
+    this.reloadBibBtn?.toggleClass('is-hidden', !hasBib);
+    this.annSearchLabel?.toggleClass('is-hidden', !hasZotero);
+    if (!hasZotero && this.searchAnnotationsToggle) {
+      this.searchAnnotationsToggle.checked = false;
+    }
+  }
+
+  private appendBibliographyFileSection(hasZotero: boolean): void {
+    const entries = listBibliographyEntriesFromCache(
+      this.plugin.bibManager.bibCache
+    );
+    if (!entries.length) return;
+
+    const zoteroCitekeys = new Set(
+      this.flatRows.map((r) => r.citekey).filter(Boolean)
+    );
+
+    const bibRows: RowFlat[] = [];
+    for (const entry of entries) {
+      if (hasZotero && zoteroCitekeys.has(entry.id)) continue;
+      const row = bibliographyRowFromEntry(entry);
+      bibRows.push({
+        key: row.key,
+        stored: row.stored,
+        title: row.title,
+        citekey: row.citekey,
+      });
+    }
+
+    if (!bibRows.length) return;
+
+    this.flatRows.push(...bibRows);
+
+    const children: ItemTreeNode[] = bibRows.map((row) => ({
+      stored: row.stored,
+      citekey: row.citekey,
+      title: row.title,
+      labelKind: 'item',
+      inlineAttachments: bibFileAttachmentsFromPaths(
+        row.citekey,
+        this.plugin.bibManager.zCitekeyToPDFLinks.get(row.citekey) ?? []
+      ),
+      children: [],
+    }));
+
+    if (hasZotero) {
+      this.treeRoots.push({
+        stored: {} as StoredZoteroItem,
+        citekey: '',
+        title: `${t('Bibliography file')} (${children.length})`,
+        labelKind: 'section',
+        inlineAttachments: [],
+        children,
+      });
+    } else {
+      this.treeRoots = [
+        {
+          stored: {} as StoredZoteroItem,
+          citekey: '',
+          title: t('Bibliography file'),
+          labelKind: 'root',
+          inlineAttachments: [],
+          children,
+        },
+      ];
+    }
+  }
+
+  private async loadZoteroLibraryData(): Promise<void> {
     const snapMerged = await this.plugin.zoteroSync.loadSnapshot();
     const settings = this.plugin.settings;
 
     this.flatRows = Object.values(snapMerged.items).map((st) =>
       this.makeRow(st)
     );
-    this.fuse = new Fuse(this.flatRows, fuseOpts);
     this.annRows = buildAnnotationRowsFromSnapshot(snapMerged);
     this.annFuse =
       this.annRows.length > 0
@@ -570,12 +686,56 @@ export class ZoteroLibraryPanel {
       });
     }
 
+  }
+
+  async refreshList() {
+    await this.plugin.initPromise.promise;
+    await this.plugin.bibManager.initPromise.promise;
+
+    const hasZotero = !!this.plugin.settings.pullFromZoteroApi;
+    const hasBib = !!this.plugin.settings.pathToBibliography?.trim();
+
+    this.flatRows = [];
+    this.treeRoots = [];
+    this.annRows = [];
+    this.annFuse = null;
+    this.attachmentChildrenByParent.clear();
+
+    if (hasZotero) {
+      await this.loadZoteroLibraryData();
+    }
+
+    if (hasBib) {
+      const bibPath = this.plugin.settings.pathToBibliography?.trim();
+      if (!hasZotero) {
+        await this.plugin.bibManager.loadGlobalBibFile(true);
+      }
+      if (bibPath) {
+        await this.plugin.bibManager.mergePdfLinksFromBibliographyFile(bibPath, {
+          replace: !hasZotero,
+        });
+      }
+      this.appendBibliographyFileSection(hasZotero);
+    }
+
+    this.fuse =
+      this.flatRows.length > 0 ? new Fuse(this.flatRows, fuseOpts) : null;
+
+    this.updateLibraryModeUi();
     this.render();
   }
 
   render() {
     const q = this.filterInput?.value?.trim() ?? '';
     this.listEl.empty();
+
+    if (!this.flatRows.length && !this.treeRoots.length) {
+      this.listEl.createDiv({
+        cls: 'pwc-zotero-library__empty',
+        text: t('No library entries'),
+      });
+      return;
+    }
 
     if (this.searchAnnotationsToggle?.checked) {
       this.renderAnnotationSearch(q);
@@ -857,7 +1017,12 @@ export class ZoteroLibraryPanel {
     });
     const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
     this.attachRowActions(actions, row.stored, row.citekey);
-    const atts = this.attachmentChildrenByParent.get(row.key);
+    const atts = isBibliographyFileRow(row.stored)
+      ? bibFileAttachmentsFromPaths(
+          row.citekey,
+          this.plugin.bibManager.zCitekeyToPDFLinks.get(row.citekey) ?? []
+        )
+      : this.attachmentChildrenByParent.get(row.key);
     if (atts?.length) this.renderPdfStripInRow(rowEl, atts);
   }
 
@@ -1034,6 +1199,32 @@ export class ZoteroLibraryPanel {
     stored: StoredZoteroItem,
     citekey: string
   ) {
+    if (isBibliographyFileRow(stored)) {
+      if (citekey) {
+        const insertBtn = actions.createEl('button', {
+          cls: 'clickable-icon',
+          attr: {
+            type: 'button',
+            'aria-label': t('Insert citekey'),
+            title: t('Insert citekey'),
+          },
+        });
+        setIcon(insertBtn, 'quote-glyph');
+        insertBtn.addEventListener('click', () => {
+          if (
+            insertTextInActiveMarkdownNote(
+              this.plugin.app,
+              `[@${citekey}]`
+            )
+          ) {
+            return;
+          }
+          new Notice(t('Open a markdown note to insert citations'));
+        });
+      }
+      return;
+    }
+
     const editBtn = actions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__btn-edit',
       attr: { type: 'button', 'aria-label': t('Edit'), title: t('Edit') },

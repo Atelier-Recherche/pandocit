@@ -58,13 +58,19 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
 
     const layer = pageEl.createDiv({ cls: 'pwc-zotero-overlay-layer' });
     for (const ann of anns) {
+      const markup = ann.markupStyle ?? 'highlight';
       for (const rect of ann.rects ?? []) {
-        const el = layer.createDiv({ cls: 'pwc-zotero-overlay-rect' });
+        const el = layer.createDiv({
+          cls: `pwc-zotero-overlay-rect pwc-zotero-overlay-rect--${markup}`,
+        });
         el.style.left = `${(rect.x / pageSize.width) * 100}%`;
         el.style.top = `${(rect.y / pageSize.height) * 100}%`;
         el.style.width = `${(rect.width / pageSize.width) * 100}%`;
         el.style.height = `${(rect.height / pageSize.height) * 100}%`;
-        el.style.background = ann.color || '#ffd400';
+        el.style.setProperty('--pwc-ann-color', ann.color || '#ffd400');
+        if (markup === 'highlight') {
+          el.style.background = ann.color || '#ffd400';
+        }
         el.title = ann.comment || ann.text || 'Zotero annotation';
         el.style.pointerEvents = 'auto';
         el.addEventListener('click', (evt) => {

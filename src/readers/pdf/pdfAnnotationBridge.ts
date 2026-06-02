@@ -35,7 +35,26 @@ export function pdfHighlightToDocumentAnnotation(h: PdfHighlight): DocumentAnnot
     pageIndex: h.pageIndex,
     pageLabel: String(h.pageIndex + 1),
     rects: h.rects,
+    markupStyle: h.style ?? 'highlight',
   };
+}
+
+/** Type d’annotation Zotero → style d’affichage Obsidian. */
+export function zoteroAnnotationTypeToMarkupStyle(
+  annotationType: string
+): NonNullable<DocumentAnnotation['markupStyle']> {
+  switch (String(annotationType).toLowerCase()) {
+    case 'underline':
+      return 'underline';
+    case 'strikeout':
+    case 'strikethrough':
+      return 'strikeout';
+    case 'squiggly':
+      return 'squiggly';
+    case 'highlight':
+    default:
+      return 'highlight';
+  }
 }
 
 export function parseZoteroAnnotationPositionRaw(

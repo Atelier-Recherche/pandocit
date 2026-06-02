@@ -34,6 +34,36 @@ export default {
   'Custom citation style': 'Custom citation style',
   'Citation style': 'Citation style',
   'Citation style language': 'Citation style language',
+  'Type to search CSL styles (e.g. apa, chicago).':
+    'Type to search CSL styles (e.g. apa, chicago).',
+  'Search CSL styles…': 'Search CSL styles…',
+  'Type to search CSL styles': 'Type to search CSL styles',
+  'No matching CSL styles': 'No matching CSL styles',
+  'Search languages…': 'Search languages…',
+  'Type to search languages': 'Type to search languages',
+  'No matching languages': 'No matching languages',
+  'Searching…': 'Searching…',
+  'Formatted inline citations': 'Formatted inline citations',
+  'Replace [@citekey] with author–year (or your CSL style). When off, the citekey stays visible; hover tooltips still work.':
+    'Replace [@citekey] with author–year (or your CSL style). When off, the citekey stays visible; hover tooltips still work.',
+  'Clear selection': 'Clear selection',
+  'EPUB reader is desktop-only': 'EPUB reader is desktop-only',
+  'Underline citekeys': 'Underline citekeys',
+  'Dotted underline on resolved and unresolved citekeys in the editor.':
+    'Dotted underline on resolved and unresolved citekeys in the editor.',
+  'Insert citation…': 'Insert citation…',
+  'Insert citation': 'Insert citation',
+  'Search by citekey or title…': 'Search by citekey or title…',
+  'Searching library and bibliography':
+    'Searching library and bibliography',
+  'Searching Zotero library and bibliography':
+    'Searching library and bibliography',
+  'Searching bibliography': 'Searching bibliography',
+  'insert [@citekey]': 'insert [@citekey]',
+  'insert @citekey': 'insert @citekey',
+  'Bibliography is empty': 'Bibliography is empty',
+  'Open a markdown note to insert a citation':
+    'Open a markdown note to insert a citation',
   'Search...': 'Search...',
   'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.':
     'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.',
@@ -51,8 +81,8 @@ export default {
   'Set the amount of time (in milliseconds) to wait before displaying tooltips.':
     'Set the amount of time (in milliseconds) to wait before displaying tooltips.',
   'Open PDF links in new tab': 'Open PDF links in new tab',
-  'When enabled, vault PDFs opened from citekey tooltips or the Zotero library open in a new tab. When disabled, Obsidian may split the current pane instead.':
-    'When enabled, vault PDFs opened from citekey tooltips or the Zotero library open in a new tab. When disabled, Obsidian may split the current pane instead.',
+  'When enabled, vault PDFs opened from citekey tooltips or the library panel open in a new tab. When disabled, Obsidian may split the current pane instead.':
+    'When enabled, vault PDFs opened from citekey tooltips or the library panel open in a new tab. When disabled, Obsidian may split the current pane instead.',
   'Validate Pandoc configuration': 'Validate Pandoc configuration',
   Validate: 'Validate',
   'Validation successful': 'Validation successful',
@@ -79,6 +109,15 @@ export default {
   'No citations found in the current document.':
     'No citations found in the current document.',
   References: 'References',
+  Library: 'Library',
+  Annotations: 'Annotations',
+  'Bibliography file': 'Bibliography file',
+  'Reload bibliography file': 'Reload bibliography file',
+  'Bibliography reloaded': 'Bibliography reloaded',
+  'No library entries': 'No library entries',
+  'Set a bibliography file path or enable Zotero Web API in plugin settings':
+    'Set a bibliography file path or enable Zotero Web API in plugin settings',
+  'Badge BibTeX entry': 'BibTeX',
   'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.':
     'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.',
   'See here for a list of available language codes':
@@ -199,7 +238,6 @@ export default {
     'Needs library access and write access to edit items.',
   'Could not validate API key': 'Could not validate API key',
   'API key OK': 'API key OK',
-  Library: 'Library',
   'User library or a group library.': 'User library or a group library.',
   'My library': 'My library',
   'Group library': 'Group library',
@@ -216,6 +254,8 @@ export default {
     'Download remote changes and upload local edits.',
   'Sync Zotero library (Web API)': 'Sync Zotero library (Web API)',
   'Open Zotero library panel': 'Open Zotero library panel',
+  'Open library panel': 'Open library panel',
+  'Open annotations panel': 'Open annotations panel',
   'Zotero library has no items — run Sync':
     'Zotero library has no items — run Sync',
   'Enable “Use Zotero Web API” in plugin settings first':

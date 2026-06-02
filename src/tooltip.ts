@@ -6,6 +6,9 @@ import { t } from './lang/helpers';
 import ReferenceList from './main';
 import clip from 'text-clipper';
 
+/** Délai avant affichage d’une infobulle au survol (non exposé dans les réglages). */
+const CITATION_TOOLTIP_DELAY_MS = 400;
+
 /** Extrait un numéro de page typique du locator Pandoc (ex. `p78`, `pp. 12-14`). */
 function pageNumberFromLocator(loc: string): number | null {
   const m = loc.trim().match(/\d+/);
@@ -277,8 +280,6 @@ export class TooltipManager {
   previewDBTimer = 0;
   previewDBTimerClose = 0;
   bindCitationInteraction(el: HTMLElement) {
-    if (!this.plugin.settings.showCitekeyTooltips) return;
-
     if (citationInfoUsesTap()) {
       el.addClass('pwc-cite-tappable');
       el.setAttr('role', 'button');
@@ -301,7 +302,7 @@ export class TooltipManager {
       evt.view.clearTimeout(this.previewDBTimerClose);
       this.previewDBTimer = evt.view.setTimeout(() => {
         this.showTooltip(el);
-      }, this.plugin.settings.tooltipDelay);
+      }, CITATION_TOOLTIP_DELAY_MS);
     });
 
     el.addEventListener('pointerout', (evt) => {
@@ -395,7 +396,7 @@ export class TooltipManager {
               dbOverTimer = evt.view.setTimeout(() => {
                 this.showTooltip(target);
                 activeKey = citekey;
-              }, this.plugin.settings.tooltipDelay);
+              }, CITATION_TOOLTIP_DELAY_MS);
             }
             return;
           }

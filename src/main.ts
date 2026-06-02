@@ -44,6 +44,12 @@ import { EpubReaderView, epubReaderViewType } from './readers/epub/EpubReaderVie
 import { registerDocumentOpenRouter } from './readers/documentRouter';
 import { safeRegisterExtensions } from './readers/registerExtensionsSafe';
 import { ZoteroAnnotationIndex } from './annotations/zoteroAnnotationIndex';
+import { openCitekeyPickerModal } from './citekeyPicker/CitekeyPickerModal';
+import {
+  isFormattedCitationsEnabled,
+  setFormattedCitationsEnabled,
+  syncCitationUiClasses,
+} from './citationUi';
 
 export default class ReferenceList extends Plugin {
   settings: ReferenceListSettings;
@@ -137,7 +143,7 @@ export default class ReferenceList extends Plugin {
 
     this.addCommand({
       id: 'zotero-library-panel',
-      name: t('Open Zotero library panel'),
+      name: t('Open library panel'),
       callback: async () => {
         await this.initShell('zotero');
       },
@@ -145,7 +151,7 @@ export default class ReferenceList extends Plugin {
 
     this.addCommand({
       id: 'pwc-document-annotations-panel',
-      name: t('Document annotations panel'),
+      name: t('Open annotations panel'),
       callback: async () => {
         await this.initShell('document-annotations');
       },
@@ -168,6 +174,18 @@ export default class ReferenceList extends Plugin {
           return;
         }
         await openInPandocitReader(this, file);
+      },
+    });
+
+    this.addCommand({
+      id: 'insert-citekey',
+      name: t('Insert citation…'),
+      hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'c' }],
+      editorCheckCallback: (checking, _editor, view) => {
+        if (!(view instanceof MarkdownView)) return false;
+        if (checking) return true;
+        void openCitekeyPickerModal(this);
+        return true;
       },
     });
 
@@ -247,11 +265,7 @@ export default class ReferenceList extends Plugin {
       },
     });
 
-    document.body.toggleClass(
-      'pwc-tooltips',
-      !!this.settings.showCitekeyTooltips
-    );
-    TooltipManager.syncTapModeBodyClass(!!this.settings.showCitekeyTooltips);
+    syncCitationUiClasses(this.settings);
 
     this.registerEvent(
       app.metadataCache.on(
@@ -310,7 +324,11 @@ export default class ReferenceList extends Plugin {
   }
 
   onunload() {
-    document.body.removeClass('pwc-tooltips', 'pwc-cite-tap-mode');
+    document.body.removeClass(
+      'pwc-tooltips',
+      'pwc-cite-underline',
+      'pwc-cite-tap-mode'
+    );
     for (const type of [
       shellViewType,
       pdfReaderViewType,
@@ -384,11 +402,25 @@ export default class ReferenceList extends Plugin {
         .addItem((item: any) =>
           item
             .setSection('settings')
-            .setIcon('lucide-message-square')
-            .setTitle(t('Show citekey tooltips'))
-            .setChecked(!!settings.showCitekeyTooltips)
+            .setIcon('lucide-underline')
+            .setTitle(t('Underline citekeys'))
+            .setChecked(!!settings.underlineCitekeys)
             .onClick(() => {
-              this.settings.showCitekeyTooltips = !settings.showCitekeyTooltips;
+              this.settings.underlineCitekeys = !settings.underlineCitekeys;
+              this.saveSettings();
+            })
+        )
+        .addItem((item: any) =>
+          item
+            .setSection('settings')
+            .setIcon('lucide-text')
+            .setTitle(t('Formatted inline citations'))
+            .setChecked(isFormattedCitationsEnabled(settings))
+            .onClick(() => {
+              setFormattedCitationsEnabled(
+                this.settings,
+                !isFormattedCitationsEnabled(settings)
+              );
               this.saveSettings();
             })
         )
@@ -403,6 +435,13 @@ export default class ReferenceList extends Plugin {
                 !settings.enableCiteKeyCompletion;
               this.saveSettings();
             })
+        )
+        .addItem((item: any) =>
+          item
+            .setSection('actions')
+            .setIcon('lucide-plus')
+            .setTitle(t('Insert citation…'))
+            .onClick(() => void openCitekeyPickerModal(this))
         )
         .addItem((item: any) =>
           item
@@ -489,16 +528,16 @@ export default class ReferenceList extends Plugin {
     ) {
       merged.zoteroApiMergeGroupIds = [Number(raw.zoteroApiMergeGroupId)];
     }
+    merged.showCitekeyTooltips = true;
+
     this.settings = merged;
     setPluginUiLocale(this.settings.pluginUiLocale);
+    syncCitationUiClasses(this.settings);
   }
 
   async saveSettings(cb?: () => void) {
-    document.body.toggleClass(
-      'pwc-tooltips',
-      !!this.settings.showCitekeyTooltips
-    );
-    TooltipManager.syncTapModeBodyClass(!!this.settings.showCitekeyTooltips);
+    this.settings.showCitekeyTooltips = true;
+    syncCitationUiClasses(this.settings);
 
     this.emitSettingsUpdate(cb);
     await this.saveData(this.settings);

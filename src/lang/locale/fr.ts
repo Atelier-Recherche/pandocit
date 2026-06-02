@@ -33,6 +33,37 @@ export default {
   'Custom citation style': 'Style de citation personnalisé',
   'Citation style': 'Style de citation',
   'Citation style language': 'Langue du style de citation',
+  'Type to search CSL styles (e.g. apa, chicago).':
+    'Tapez pour chercher un style CSL (ex. apa, chicago).',
+  'Search CSL styles…': 'Rechercher un style CSL…',
+  'Type to search CSL styles': 'Tapez pour chercher un style CSL',
+  'No matching CSL styles': 'Aucun style CSL correspondant',
+  'Search languages…': 'Rechercher une langue…',
+  'Type to search languages': 'Tapez pour chercher une langue',
+  'No matching languages': 'Aucune langue correspondante',
+  'Searching…': 'Recherche…',
+  'Formatted inline citations': 'Citations formatées en ligne',
+  'Replace [@citekey] with author–year (or your CSL style). When off, the citekey stays visible; hover tooltips still work.':
+    'Remplace [@cle] par auteur–année (ou votre style CSL). Désactivé : la clé reste visible ; les infobulles au survol restent actives.',
+  'Clear selection': 'Effacer la sélection',
+  'EPUB reader is desktop-only':
+    'Le lecteur EPUB PandoCit est disponible uniquement sur ordinateur.',
+  'Underline citekeys': 'Souligner les clés de citation',
+  'Dotted underline on resolved and unresolved citekeys in the editor.':
+    'Soulignement pointillé des clés résolues et non résolues dans l’éditeur.',
+  'Insert citation…': 'Insérer une citation…',
+  'Insert citation': 'Insérer une citation',
+  'Search by citekey or title…': 'Rechercher par clé ou titre…',
+  'Searching library and bibliography':
+    'Recherche dans la bibliothèque et le fichier bibliographie…',
+  'Searching Zotero library and bibliography':
+    'Recherche dans la bibliothèque Zotero et le fichier bib',
+  'Searching bibliography': 'Recherche dans la bibliographie',
+  'insert [@citekey]': 'insérer [@cle]',
+  'insert @citekey': 'insérer @cle',
+  'Bibliography is empty': 'Bibliographie vide',
+  'Open a markdown note to insert a citation':
+    'Ouvrez une note Markdown pour insérer une citation',
   'Search...': 'Rechercher…',
   'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.':
     'Chemin d’un fichier CSL (absolu ou relatif au coffre). Remplace le style ci-dessus ; surcharge possible par fichier avec « csl » ou « citation-style » dans les métadonnées. Une URL peut être indiquée via les métadonnées.',
@@ -50,8 +81,10 @@ export default {
   'Set the amount of time (in milliseconds) to wait before displaying tooltips.':
     'Temps d’attente (millisecondes) avant d’afficher une infobulle.',
   'Open PDF links in new tab': 'Ouvrir les PDF dans un nouvel onglet',
+  'When enabled, vault PDFs opened from citekey tooltips or the library panel open in a new tab. When disabled, Obsidian may split the current pane instead.':
+    'Si activé, les PDF du coffre ouverts depuis les infobulles ou le panneau Bibliothèque s’ouvrent dans un nouvel onglet. Sinon, Obsidian peut utiliser une vue scindée.',
   'When enabled, vault PDFs opened from citekey tooltips or the Zotero library open in a new tab. When disabled, Obsidian may split the current pane instead.':
-    'Si activé, les PDF du coffre ouverts depuis les infobulles ou le panneau Zotero s’ouvrent dans un nouvel onglet. Sinon, Obsidian peut utiliser une vue scindée.',
+    'Si activé, les PDF du coffre ouverts depuis les infobulles ou le panneau Bibliothèque s’ouvrent dans un nouvel onglet. Sinon, Obsidian peut utiliser une vue scindée.',
   'Validate Pandoc configuration': 'Valider la configuration Pandoc',
   Validate: 'Valider',
   'Validation successful': 'Validation réussie',
@@ -78,6 +111,15 @@ export default {
   'No citations found in the current document.':
     'Aucune citation dans le document actuel.',
   References: 'Références',
+  Library: 'Bibliothèque',
+  Annotations: 'Annotations',
+  'Bibliography file': 'Fichier bibliographie',
+  'Reload bibliography file': 'Recharger le fichier bibliographie',
+  'Bibliography reloaded': 'Bibliographie rechargée',
+  'No library entries': 'Aucune entrée dans la bibliothèque',
+  'Set a bibliography file path or enable Zotero Web API in plugin settings':
+    'Indiquez un fichier bibliographie ou activez l’API Web Zotero dans les réglages du plugin',
+  'Badge BibTeX entry': 'BibTeX',
   'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.':
     'Peut être surchargé par fichier avec « lang » ou « citation-language » dans les métadonnées (code langue obligatoire).',
   'See here for a list of available language codes':
@@ -195,7 +237,6 @@ export default {
     'Accès à la bibliothèque et écriture nécessaires pour modifier les entrées.',
   'Could not validate API key': 'Impossible de valider la clé API',
   'API key OK': 'Clé API valide',
-  Library: 'Bibliothèque',
   'User library or a group library.': 'Bibliothèque personnelle ou de groupe.',
   'My library': 'Ma bibliothèque',
   'Group library': 'Bibliothèque de groupe',
@@ -211,7 +252,9 @@ export default {
   'Download remote changes and upload local edits.':
     'Télécharge les changements distants et envoie les modifications locales.',
   'Sync Zotero library (Web API)': 'Synchroniser la bibliothèque Zotero (API)',
-  'Open Zotero library panel': 'Ouvrir le panneau bibliothèque Zotero',
+  'Open Zotero library panel': 'Ouvrir le panneau bibliothèque',
+  'Open library panel': 'Ouvrir le panneau bibliothèque',
+  'Open annotations panel': 'Ouvrir le panneau annotations',
   'Zotero library has no items — run Sync':
     'La bibliothèque Zotero est vide — lancez une synchro',
   'Enable “Use Zotero Web API” in plugin settings first':

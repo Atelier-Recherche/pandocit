@@ -69,9 +69,9 @@ export class PandoCitShellView extends ItemView {
       case 'references':
         return t('References');
       case 'zotero':
-        return t('Zotero library');
+        return t('Library');
       case 'document-annotations':
-        return t('Document annotations');
+        return t('Annotations');
     }
   }
 
@@ -96,18 +96,20 @@ export class PandoCitShellView extends ItemView {
       host.toggleClass('is-active', id === tab);
     }
     if (tab === 'zotero' && !this.zoteroPanel) {
-      if (!this.plugin.settings.pullFromZoteroApi) {
-        const host = this.panelHosts.get('zotero')!;
+      const hasLibrary =
+        !!this.plugin.settings.pullFromZoteroApi ||
+        !!this.plugin.settings.pathToBibliography?.trim();
+      const host = this.panelHosts.get('zotero')!;
+      if (!hasLibrary) {
         host.empty();
         host.createDiv({
           cls: 'pane-empty',
-          text: t('Enable “Use Zotero Web API” in plugin settings first'),
+          text: t(
+            'Set a bibliography file path or enable Zotero Web API in plugin settings'
+          ),
         });
       } else {
-        this.zoteroPanel = new ZoteroLibraryPanel(
-          this.panelHosts.get('zotero')!,
-          this.plugin
-        );
+        this.zoteroPanel = new ZoteroLibraryPanel(host, this.plugin);
       }
     }
     if (tab === 'document-annotations' && !this.docPanel) {
