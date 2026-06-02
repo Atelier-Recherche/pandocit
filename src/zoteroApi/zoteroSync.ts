@@ -244,6 +244,51 @@ export class ZoteroSyncService {
     return merged;
   }
 
+  private pickSnapItem(
+    snap: ZoteroStoreSnapshot,
+    itemKey: string,
+    plainKey: string
+  ): StoredZoteroItem | undefined {
+    return snap.items[itemKey] ?? snap.items[plainKey];
+  }
+
+  /**
+   * Résout une entrée du cache local pour écriture API (clé complète ou `g{id}_…`).
+   * Utilise la vue fusionnée si l’item n’est pas dans le fichier biblio cible.
+   */
+  private async resolveStoredItemForWrite(itemKey: string): Promise<{
+    route: ReturnType<ZoteroSync['getWriteRoute']>;
+    snap: ZoteroStoreSnapshot;
+    item: StoredZoteroItem;
+  } | null> {
+    const parsed = parseStorageItemKey(itemKey);
+    let route = this.getWriteRoute(itemKey);
+    let snap = await this.store.load(route.fileId);
+    let item = this.pickSnapItem(snap, itemKey, route.plainKey);
+
+    if (!item) {
+      const merged = await this.loadSnapshot();
+      const mergedItem =
+        this.pickSnapItem(merged, itemKey, parsed.plainKey) ??
+        merged.items[itemKey];
+      if (!mergedItem) return null;
+
+      route = this.getWriteRoute(mergedItem.key);
+      snap = await this.store.load(route.fileId);
+      item = this.pickSnapItem(snap, mergedItem.key, route.plainKey);
+
+      if (!item) {
+        const refreshed = await this.fetchAndOverwriteItem(mergedItem.key);
+        if (!refreshed) return null;
+        snap = await this.store.load(route.fileId);
+        item = this.pickSnapItem(snap, mergedItem.key, route.plainKey);
+      }
+    }
+
+    if (!item) return null;
+    return { route, snap, item };
+  }
+
   private getWriteRoute(itemKey: string): {
     fileId: string;
     prefix: string;
@@ -970,10 +1015,10 @@ export class ZoteroSyncService {
     }
   ): Promise<{ ok: boolean; key?: string; error?: string }> {
     this.updateApiKey();
-    const route = this.getWriteRoute(parentAttachmentKey);
-    let snap = await this.store.load(route.fileId);
-    const parent = snap.items[route.plainKey];
-    if (!parent) return { ok: false, error: 'not_found' };
+    const resolved = await this.resolveStoredItemForWrite(parentAttachmentKey);
+    if (!resolved) return { ok: false, error: 'not_found' };
+    const { route, item: parent } = resolved;
+    let snap = resolved.snap;
     if (String(parent.data.itemType) !== 'attachment') {
       return { ok: false, error: 'parent_not_attachment' };
     }

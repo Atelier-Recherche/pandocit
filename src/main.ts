@@ -233,6 +233,11 @@ export default class ReferenceList extends Plugin {
         await this.bibManager.initPromise.promise;
         this.processReferences();
         await this.shell?.zoteroPanel?.refreshList();
+        this.emitter.trigger('pwc-zotero-synced');
+        const { refreshEpubReaderAnnotations } = await import(
+          './readers/epub/epubReaderRefresh'
+        );
+        await refreshEpubReaderAnnotations(this);
       },
     });
 

@@ -9,6 +9,7 @@ import type ReferenceList from '../main';
 import { readerRegistry } from '../readers/readerRegistry';
 import type { DocumentAnnotation } from '../annotations/types';
 import { openDocumentFromPlugin } from '../readers/openDocument';
+import { openEpubAtAnnotation } from '../readers/epub/navigateEpubAnnotation';
 import {
   exportAnnotationsToHypothesis,
   importHypothesisForUri,
@@ -19,6 +20,8 @@ import {
   convertAnnotationTarget,
   deleteDocumentAnnotation,
 } from '../readers/pdf/pdfAnnotationActions';
+import { createEpubHighlightFromSelection } from '../readers/epub/epubCreateHighlight';
+import { getActiveEpubReaderForPlugin } from '../readers/epub/epubReaderUi';
 
 export class DocumentAnnotationsPanel {
   private listEl: HTMLElement;
@@ -52,9 +55,21 @@ export class DocumentAnnotationsPanel {
       b.addEventListener('click', fn);
     };
     addBtn('refresh-ccw', t('Refresh'), () => this.render());
-    addBtn('highlighter', t('Highlight selection in PDF'), () =>
-      void createPdfHighlightFromSelection(this.plugin, { showModal: true })
-    );
+    addBtn('highlighter', t('Highlight selection in document'), () => {
+      const state = readerRegistry.get();
+      if (state?.kind === 'epub') {
+        const view = getActiveEpubReaderForPlugin(this.plugin);
+        if (!view) {
+          new Notice(t('Open an EPUB in PandoCit reader first'));
+          return;
+        }
+        void createEpubHighlightFromSelection(this.plugin, view, {
+          showModal: true,
+        });
+        return;
+      }
+      void createPdfHighlightFromSelection(this.plugin, { showModal: true });
+    });
     if (isHypothesisConfigured(this.plugin)) {
       addBtn('download', t('Import Hypothesis'), () => void this.importHypothesis());
       addBtn('upload', t('Export to Hypothesis'), () => void this.exportHypothesis());
@@ -191,11 +206,15 @@ export class DocumentAnnotationsPanel {
         text: `Note: ${displayComment.slice(0, 200)}`,
       });
     }
-    if (ann.pageLabel || ann.cfi) {
-      row.createDiv({
-        cls: 'pwc-doc-annotations__loc',
-        text: ann.pageLabel ? `p.${ann.pageLabel}` : ann.cfi?.slice(0, 40),
-      });
+    if (ann.pageLabel || ann.cfi || ann.zoteroCfi) {
+      const loc = ann.pageLabel
+        ? `p.${ann.pageLabel}`
+        : ann.zoteroCfi
+          ? `Z:${ann.zoteroCfi.slice(0, 48)}`
+          : ann.cfi?.slice(0, 48);
+      if (loc) {
+        row.createDiv({ cls: 'pwc-doc-annotations__loc', text: loc });
+      }
     }
     const actions = row.createDiv({ cls: 'pwc-doc-annotations__row-actions' });
     const citekey = readerRegistry.get()?.citekey;
@@ -217,10 +236,14 @@ export class DocumentAnnotationsPanel {
       cls: 'mod-cta',
     });
     go.addEventListener('click', () => {
+      const isEpub = vaultPath.toLowerCase().endsWith('.epub');
+      if (isEpub && ann.cfi) {
+        void openEpubAtAnnotation(this.plugin, vaultPath, ann.cfi, ann);
+        return;
+      }
       const page = ann.pageIndex != null ? ann.pageIndex + 1 : undefined;
       void openDocumentFromPlugin(this.plugin, vaultPath, {
         page,
-        zoteroAnnotationKey: ann.zoteroKey,
         reuseOpenPdfLeaf: true,
       });
     });
@@ -230,15 +253,22 @@ export class DocumentAnnotationsPanel {
       if (!ok) return;
       void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
     });
-    if (ann.source === 'local-pdf') {
-      const toZ = actions.createEl('button', { text: '→ Zotero' });
+    const isEpubDoc = vaultPath.toLowerCase().endsWith('.epub');
+    if (ann.source === 'local-pdf' || (isEpubDoc && ann.source === 'sidecar')) {
+      const toZ = actions.createEl('button', {
+        text: t('Convert annotation to Zotero'),
+      });
       toZ.addEventListener('click', () => {
         void convertAnnotationTarget(this.plugin, vaultPath, ann, 'zotero');
       });
     }
     if (ann.source === 'zotero') {
-      const toPdf = actions.createEl('button', { text: '→ PDF' });
-      toPdf.addEventListener('click', () => {
+      const toLocal = actions.createEl('button', {
+        text: isEpubDoc
+          ? t('Convert annotation to sidecar')
+          : t('Convert annotation to PDF'),
+      });
+      toLocal.addEventListener('click', () => {
         void convertAnnotationTarget(this.plugin, vaultPath, ann, 'pdf');
       });
     }

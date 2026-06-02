@@ -13,12 +13,19 @@ export interface DocumentAnnotation {
   pageLabel?: string;
   pageIndex?: number;
   cfi?: string;
+  /** Index de section foliate (spine) pour recalcul CFI Zotero. */
+  sectionIndex?: number;
+  /** CFI epub.js (Zotero) — peut différer du CFI foliate. */
+  zoteroCfi?: string;
+  zoteroSortIndex?: string;
   zoteroKey?: string;
   created?: string;
   /** PDF rects in page space */
   rects?: Array<{ x: number; y: number; width: number; height: number }>;
   /** Rendu PDF : surlignage, soulignement, barré, ondulé */
   markupStyle?: 'highlight' | 'underline' | 'strikeout' | 'squiggly';
+  /** Opacité du surlignage (0–1), lecteur EPUB */
+  opacity?: number;
 }
 
 export interface ZoteroAnnotationRow {

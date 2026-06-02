@@ -401,11 +401,41 @@ export default {
   'EPUB reader failed to initialize': 'Échec d’initialisation du lecteur EPUB',
   'Highlight selection (in reader)': 'Surligner la sélection (dans le lecteur)',
   'Select text in the EPUB reader, then release the mouse to save a highlight.':
-    'Sélectionnez du texte dans le lecteur EPUB, puis relâchez la souris pour enregistrer un surlignage.',
+    'Sélectionnez du texte, puis clic droit → Surligner (ou bouton surligneur de la barre d’outils).',
   'Reload EPUB': 'Recharger l’EPUB',
   'Previous page': 'Page précédente',
   'Next page': 'Page suivante',
   'Highlight saved to sidecar': 'Surlignage enregistré dans le fichier annexe',
+  'Highlight saved to Zotero': 'Surlignage enregistré dans Zotero',
+  'Highlight saved to sidecar and Zotero': 'Surlignage enregistré (fichier annexe et Zotero)',
+  'Zotero save failed': 'Échec de l’enregistrement Zotero',
+  'Highlight selection in EPUB': 'Surligner la sélection (EPUB)',
+  'Select text in the EPUB reader first': 'Sélectionnez du texte dans le lecteur EPUB',
+  'EPUB highlight modal title': 'Surligner la sélection (EPUB)',
+  'Highlight save target': 'Enregistrer dans',
+  'EPUB highlight target hint':
+    'Fichier annexe = .epub.pandocit.ann.json dans le coffre. Zotero nécessite une pièce jointe EPUB liée.',
+  'Highlight target sidecar': 'fichier annexe uniquement',
+  'Highlight target both epub': 'fichier annexe + Zotero',
+  'No Zotero attachment match for this EPUB':
+    'Aucune pièce jointe Zotero liée à cet EPUB (vérifiez le lien fichier dans Zotero)',
+  'Invalid EPUB position': 'Position EPUB invalide',
+  'EPUB Zotero position could not be computed':
+    'Impossible de calculer la position Zotero (gardez le lecteur EPUB ouvert sur le même passage)',
+  'Highlight opacity label': 'Transparence',
+  'Highlight opacity desc': '0 = opaque, 100 = très transparent',
+  'Highlight style label': 'Style',
+  'Convert annotation to Zotero': '→ Zotero',
+  'Convert annotation to sidecar': '→ local',
+  'Convert annotation to PDF': '→ PDF',
+  'Annotation copied to Zotero': 'Annotation copiée vers Zotero',
+  'Annotation copied to sidecar': 'Annotation copiée vers le fichier annexe',
+  'Annotation already in Zotero': 'Annotation déjà dans Zotero',
+  'Annotation already in sidecar': 'Annotation déjà dans le fichier annexe',
+  'Open an EPUB in PandoCit reader first':
+    'Ouvrez d’abord un EPUB dans le lecteur PandoCit',
+  'Highlight selection in document': 'Surligner la sélection',
+  'Color': 'Couleur',
   'Open a document in PandoCit reader first':
     'Ouvrez d’abord un document dans le lecteur PandoCit',
   'Open a PDF or EPUB with PandoCit reader to see annotations here.':

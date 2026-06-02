@@ -64,7 +64,8 @@ $requiredFiles = @(
   'pdf.worker.min.mjs'
 )
 $requiredDirs = @(
-  'pdfjs'
+  'pdfjs',
+  'foliate'
 )
 
 foreach ($file in $requiredFiles) {

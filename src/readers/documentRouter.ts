@@ -6,6 +6,8 @@ import { epubReaderViewType } from './epub/EpubReaderView';
 import { refreshPdfPanelAnnotations } from './pdf/pdfPanelAnnotations';
 import { registerPdfNativeViewerUi } from './pdf/pdfNativeViewerUi';
 import { scheduleZoteroOverlayRender } from './pdf/zoteroPdfOverlay';
+import { refreshEpubReaderAnnotations } from './epub/epubReaderRefresh';
+import { registerEpubReaderUi } from './epub/epubReaderUi';
 
 export type DocumentKind = 'pdf' | 'epub';
 
@@ -39,7 +41,7 @@ export function shouldUsePandocitReader(
 export async function openInPandocitReader(
   plugin: ReferenceList,
   file: TFile,
-  opts?: { page?: number; leaf?: WorkspaceLeaf | null }
+  opts?: { page?: number; gotoCfi?: string; leaf?: WorkspaceLeaf | null }
 ): Promise<void> {
   const kind = documentKindForFile(file);
   if (!kind) return;
@@ -58,6 +60,7 @@ export async function openInPandocitReader(
         path: file.path,
         file: file.path,
         page: opts?.page,
+        gotoCfi: opts?.gotoCfi,
       },
     });
     plugin.app.workspace.revealLeaf(leaf);
@@ -87,6 +90,7 @@ export function schedulePandocitReaderSwap(
 
 export function registerDocumentOpenRouter(plugin: ReferenceList): void {
   registerPdfNativeViewerUi(plugin);
+  registerEpubReaderUi(plugin);
 
   plugin.registerEvent(
     plugin.app.workspace.on('file-open', (file) => {
@@ -100,10 +104,15 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
   plugin.registerEvent(
     plugin.app.workspace.on('file-open', (file) => {
       if (!(file instanceof TFile)) return;
-      if (documentKindForFile(file) !== 'pdf') return;
-      void refreshPdfPanelAnnotations(plugin, file).then(() => {
-        scheduleZoteroOverlayRender(plugin);
-      });
+      if (documentKindForFile(file) === 'pdf') {
+        void refreshPdfPanelAnnotations(plugin, file).then(() => {
+          scheduleZoteroOverlayRender(plugin);
+        });
+        return;
+      }
+      if (documentKindForFile(file) === 'epub') {
+        void refreshEpubReaderAnnotations(plugin, file.path);
+      }
     })
   );
 

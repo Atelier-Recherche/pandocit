@@ -15,6 +15,9 @@ import { pushHighlightToZotero } from './zoteroPdfAnnotations';
 import { findZoteroAttachmentKeyForVaultFile } from './zoteroAttachmentMatch';
 import { scheduleZoteroOverlayRender } from './zoteroPdfOverlay';
 import { askPdfConvertConfirm } from './pdfConvertConfirm';
+import { readOrCreateSidecarAnnotations, saveEpubSidecar } from '../epub/epubSidecar';
+import { refreshEpubReaderAnnotations } from '../epub/epubReaderRefresh';
+import { convertEpubAnnotationTarget } from '../epub/epubAnnotationActions';
 
 function toHighlight(ann: DocumentAnnotation): PdfHighlight | null {
   if (ann.pageIndex == null || !ann.rects?.length) return null;
@@ -49,7 +52,21 @@ export async function deleteDocumentAnnotation(
       return;
     }
     await plugin.zoteroSync.sync();
-    await refreshPdfUi(plugin, file);
+    plugin.emitter.trigger('pwc-zotero-synced');
+    if (file.extension.toLowerCase() === 'epub') {
+      await refreshEpubReaderAnnotations(plugin, file.path);
+    } else {
+      await refreshPdfUi(plugin, file);
+    }
+    return;
+  }
+  if (ann.source === 'sidecar' && vaultPath.toLowerCase().endsWith('.epub')) {
+    const remaining = (await readOrCreateSidecarAnnotations(vaultPath)).filter(
+      (a) => a.id !== ann.id
+    );
+    await saveEpubSidecar(vaultPath, remaining);
+    await refreshEpubReaderAnnotations(plugin, vaultPath);
+    new Notice(t('Annotation deleted'));
     return;
   }
   if (ann.source === 'local-pdf') {
@@ -81,6 +98,10 @@ export async function convertAnnotationTarget(
   ann: DocumentAnnotation,
   target: 'pdf' | 'zotero'
 ): Promise<void> {
+  if (vaultPath.toLowerCase().endsWith('.epub')) {
+    return convertEpubAnnotationTarget(plugin, vaultPath, ann, target);
+  }
+
   const choice = await askPdfConvertConfirm(plugin.app, target);
   if (!choice) return;
 

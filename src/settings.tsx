@@ -78,6 +78,11 @@ export interface ReferenceListSettings {
   pdfHighlightLastTarget?: 'pdf' | 'zotero' | 'both';
   pdfHighlightLastColor?: string;
   pdfHighlightLastOpacity?: number;
+  /** Derniers réglages de surlignage EPUB (cible indépendante du PDF). */
+  epubHighlightLastStyle?: 'highlight' | 'underline' | 'strikeout' | 'squiggly';
+  epubHighlightLastTarget?: 'pdf' | 'zotero' | 'both';
+  epubHighlightLastColor?: string;
+  epubHighlightLastOpacity?: number;
 
   pullFromZotero?: boolean;
   zoteroPort?: string;

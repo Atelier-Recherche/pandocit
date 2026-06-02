@@ -7,10 +7,13 @@ import {
 } from '../helpers';
 import type ReferenceList from '../main';
 import { openInPandocitReader } from './documentRouter';
+import { openEpubAtAnnotation } from './epub/navigateEpubAnnotation';
 
 export interface OpenDocumentOptions {
   page?: number;
   zoteroAnnotationKey?: string;
+  /** CFI EPUB (foliate) pour aller à une annotation. */
+  gotoCfi?: string;
   reuseOpenPdfLeaf?: boolean;
 }
 
@@ -105,7 +108,14 @@ export async function openDocumentFromPlugin(
     return;
   }
 
-  await openInPandocitReader(plugin, file, { page: opts.page });
+  if (opts.gotoCfi?.trim()) {
+    await openEpubAtAnnotation(plugin, rel, opts.gotoCfi);
+    return;
+  }
+
+  await openInPandocitReader(plugin, file, {
+    page: opts.page,
+  });
 }
 
 export async function openPdfForPlugin(
