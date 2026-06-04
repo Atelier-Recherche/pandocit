@@ -6,31 +6,17 @@ import {
   readFileFromEpubZip,
   parseSectionXhtml,
 } from './epubArchiveLoad';
+import { zoteroCfiFromDomRange } from './epubCfiFromRange';
 import {
   lengthenEpubCfi,
   shortenEpubCfi,
   zoteroSortIndexFromEpubCfi,
 } from './epubCfiBridge';
+import { parseEpubSpine } from './epubSpine';
 import { findRangeForText, normalizeWs } from './epubTextRange';
 
 type FoliateViewEl = HTMLElement & {
   renderer?: { getContents?: () => Array<{ index: number; doc: Document }> };
-};
-
-type EpubSection = {
-  href: string;
-  load: (request?: (url: string) => Promise<unknown>) => Promise<unknown>;
-  find: (query: string) => Array<{ cfi: string }>;
-  cfiFromRange: (range: Range) => string;
-  document?: Document;
-  contents?: Element;
-  cfiBase?: string;
-};
-
-type EpubBook = {
-  ready: Promise<void>;
-  section: (index: number) => EpubSection | null;
-  load: (path: string) => Promise<Document | string>;
 };
 
 /** Index de section foliate à partir du préfixe spine `/6/NN`. */
@@ -62,66 +48,30 @@ function liveRangeForSelection(
   return null;
 }
 
-async function openEpubBook(bytes: ArrayBuffer): Promise<EpubBook> {
-  const ePub = (await import('epubjs')).default;
-  const book = ePub(bytes, { openAs: 'binary' }) as EpubBook;
-  await book.ready;
-  return book;
+function rangeFromSectionText(
+  sectionDoc: Document,
+  text: string
+): Range | null {
+  return findRangeForText(sectionDoc, text);
 }
 
-/** Charge le document XHTML de section via l’archive (pas XHR Obsidian). */
-async function ensureSectionDocument(
-  book: EpubBook,
-  section: EpubSection,
-  epubBytes: ArrayBuffer
-): Promise<Document> {
-  if (section.document?.documentElement) return section.document;
-
-  const href = section.href;
-  if (!href) throw new Error('section href missing');
-
-  try {
-    await section.load(() => book.load(href));
-    if (section.document?.documentElement) return section.document;
-  } catch {
-    // repli zip ci-dessous
-  }
-
-  const html = readFileFromEpubZip(epubBytes, href);
-  if (!html) {
-    throw new Error(`section not in epub zip: ${href}`);
-  }
-  const doc = parseSectionXhtml(html);
-  section.document = doc;
-  section.contents = doc.documentElement;
-  return doc;
-}
-
-async function zoteroCfiFromEpubJsSection(
-  book: EpubBook,
-  sectionIndex: number,
+function zoteroCfiForSection(
+  cfiBase: string,
+  sectionDoc: Document,
   text: string,
-  epubBytes: ArrayBuffer
-): Promise<string | null> {
-  const section = book.section(sectionIndex);
-  if (!section?.cfiBase) return null;
-
-  await ensureSectionDocument(book, section, epubBytes);
-  const query = text.trim();
-  if (query.length < 2) return null;
-
-  const matches = section.find(query);
-  if (!matches.length) return null;
-
-  const want = normalizeWs(query);
-  const hit =
-    matches.find((m) => normalizeWs(m.cfi).includes(want.slice(0, 20))) ??
-    matches[0];
-  return shortenEpubCfi(hit.cfi);
+  liveRange: Range | null
+): string | null {
+  const range = liveRange ?? rangeFromSectionText(sectionDoc, text);
+  if (!range) return null;
+  try {
+    return zoteroCfiFromDomRange(cfiBase, range);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Construit position + sortIndex au format lecteur Zotero (epub.js sur le XHTML de section).
+ * Construit position + sortIndex au format lecteur Zotero (ZIP + CFI foliate, sans epub.js).
  */
 export async function resolveZoteroEpubPosition(
   plugin: ReferenceList,
@@ -134,30 +84,34 @@ export async function resolveZoteroEpubPosition(
     const buf =
       bytes instanceof ArrayBuffer
         ? bytes
-        : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        : bytes.buffer.slice(
+            bytes.byteOffset,
+            bytes.byteOffset + bytes.byteLength
+          );
 
-    const book = await openEpubBook(buf);
-
-    let zoteroCfi = await zoteroCfiFromEpubJsSection(
-      book,
-      selection.sectionIndex,
-      selection.text,
-      buf
-    );
-
-    if (!zoteroCfi && foliateEl) {
-      const contents = foliateEl.renderer?.getContents?.() ?? [];
-      const range = liveRangeForSelection(contents, selection);
-      const section = book.section(selection.sectionIndex);
-      if (range && section?.cfiBase) {
-        try {
-          await ensureSectionDocument(book, section, buf);
-          zoteroCfi = shortenEpubCfi(section.cfiFromRange(range));
-        } catch {
-          //
-        }
-      }
+    const spine = parseEpubSpine(buf);
+    const section = spine?.[selection.sectionIndex];
+    if (!section) {
+      console.warn('[PandoCit EPUB] spine section', selection.sectionIndex);
+      return null;
     }
+
+    const html = readFileFromEpubZip(buf, section.href);
+    if (!html) {
+      console.warn('[PandoCit EPUB] section file', section.href);
+      return null;
+    }
+
+    const sectionDoc = parseSectionXhtml(html);
+    const contents = foliateEl?.renderer?.getContents?.() ?? [];
+    const live = liveRangeForSelection(contents, selection);
+
+    const zoteroCfi = zoteroCfiForSection(
+      section.cfiBase,
+      sectionDoc,
+      selection.text,
+      live
+    );
 
     if (!zoteroCfi) {
       console.warn(

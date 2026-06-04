@@ -1,10 +1,9 @@
 import esbuild from 'esbuild';
 import { gzipSync } from 'fflate';
 import { builtinModules } from 'node:module';
-
 import process from 'process';
 
-import { copyFileSync, cpSync, mkdirSync, readFileSync } from 'fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } from 'fs';
 
 const builtins = [
   ...builtinModules,
@@ -40,7 +39,7 @@ function copyPdfAssets() {
 
 
 function copyFoliateAssets() {
-
+  if (!existsSync('node_modules/foliate-js')) return;
   cpSync('node_modules/foliate-js', 'foliate', { recursive: true });
 
   cpSync('src/assets/foliate/epub-bridge.html', 'foliate/epub-bridge.html');
@@ -83,7 +82,8 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === 'production';
 
-
+// foliate/epubcfi.js doit exister avant le bundle (import depuis src/readers/epub).
+copyFoliateAssets();
 
 esbuild
 
@@ -194,8 +194,6 @@ esbuild
     );
 
     copyPdfAssets();
-
-    copyFoliateAssets();
 
     copyPdfJsViewerAssets();
 
