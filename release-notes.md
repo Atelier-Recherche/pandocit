@@ -1,1 +1,1 @@
-79c2295 Update GitHub Actions workflow to remove foliate/view.js check and streamline release artifact creation for Obsidian catalog. Adjust comments for clarity on required files.
+fbceab7 Refactor EPUB reader to improve Zotero integration by streamlining CFI retrieval and section document handling. Remove unused EpubBook structure and enhance range handling for text selection. Update dependencies in package.json and clean up yarn.lock by removing obsolete packages.
