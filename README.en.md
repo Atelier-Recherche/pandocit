@@ -172,12 +172,12 @@ Build outputs include:
 
 - `main.js` (bundle; not in git — see [GitHub releases](https://github.com/Atelier-Recherche/pandocit/releases))
 - `manifest.json`, `styles.css`
-- `pdf.worker.min.mjs`, `pdfjs/` (PDF reader)
-- `pdf-assets/`, `foliate/` (copied from dependencies)
+- `pdf.worker.min.mjs`, `foliate-view.mjs` (optional in the vault; worker embedded in `main.js`; EPUB reader downloadable from settings)
+- `pdf-assets/`, `foliate/` (build outputs, not in git; `foliate/` is used to produce `foliate-view.mjs`)
 
-**Local deploy** (Windows): `.\Deploy-LocalPlugin.ps1` — copies `main.js`, `manifest.json`, `styles.css`, `pdf.worker.min.mjs`, and `pdfjs/` to your vault plugin folder (keeps `data.json` and `pandoc.wasm`).
+**Local deploy** (Windows): `.\Deploy-LocalPlugin.ps1` — copies `main.js`, `manifest.json`, `styles.css`, `pdf.worker.min.mjs`, and `foliate-view.mjs` to your vault plugin folder (keeps `data.json` and `pandoc.wasm`).
 
-**Release**: `.\Release-Plugin.ps1` bumps version, builds, commits, tags, pushes; [.github/workflows/release.yml](.github/workflows/release.yml) publishes **only** `main.js`, `manifest.json`, and `styles.css` (Obsidian community requirement). The PDF worker is **embedded in `main.js`**; optional `pdf.worker.min.mjs` download is in **plugin settings** (like `pandoc.wasm`). For `pdfjs/` and full deploy, use BRAT or `.\Deploy-LocalPlugin.ps1`.
+**Release**: `.\Release-Plugin.ps1` bumps version, builds, commits, tags, pushes; [.github/workflows/release.yml](.github/workflows/release.yml) publishes **only** `main.js`, `manifest.json`, and `styles.css` (Obsidian community requirement). The PDF worker is **embedded in `main.js`**; optional `pdf.worker.min.mjs` download is in **plugin settings** (like `pandoc.wasm`).
 
 Install **`pandoc.wasm`** from plugin settings in the vault (required for non-JSON bibliographies).
 

@@ -48,25 +48,20 @@ function copyFoliateAssets() {
 
 }
 
-function copyPdfJsViewerAssets() {
-  for (const dir of [
-    'web',
-    'build',
-    'cmaps',
-    'standard_fonts',
-    'wasm',
-    'iccs',
-    'image_decoders',
-  ]) {
-    cpSync(`node_modules/pdfjs-dist/${dir}`, `pdfjs/${dir}`, {
-      recursive: true,
-    });
-  }
-  cpSync('src/assets/pdfjs/pandocit-viewer.html', 'pdfjs/web/pandocit-viewer.html');
-  cpSync('src/assets/pdfjs/pandocit-viewer.js', 'pdfjs/web/pandocit-viewer.js');
+/** Lecteur EPUB : un seul fichier à côté de main.js (téléchargeable depuis les réglages). */
+async function buildFoliateViewBundle() {
+  if (!existsSync('foliate/view.js')) return;
+  await esbuild.build({
+    entryPoints: ['foliate/view.js'],
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2020',
+    outfile: 'foliate-view.mjs',
+    minify: prod,
+    logLevel: 'info',
+  });
 }
-
-
 
 const banner = `/*
 
@@ -195,7 +190,7 @@ esbuild
 
     copyPdfAssets();
 
-    copyPdfJsViewerAssets();
+    return buildFoliateViewBundle();
 
   })
 

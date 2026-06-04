@@ -61,20 +61,12 @@ $requiredFiles = @(
   'main.js',
   'manifest.json',
   'styles.css',
-  'pdf.worker.min.mjs'
-)
-$requiredDirs = @(
-  'pdfjs',
-  'foliate'
+  'pdf.worker.min.mjs',
+  'foliate-view.mjs'
 )
 
 foreach ($file in $requiredFiles) {
   Ensure-File -Path (Join-Path $repoRoot $file)
-}
-foreach ($dir in $requiredDirs) {
-  if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $dir) -PathType Container)) {
-    throw "Dossier requis absent: $dir"
-  }
 }
 
 if (-not (Test-Path -LiteralPath $TargetPluginDir)) {
@@ -94,9 +86,6 @@ Get-ChildItem -LiteralPath $TargetPluginDir -Force | ForEach-Object {
 Write-Host '==> Copie des artefacts plugin...'
 foreach ($file in $requiredFiles) {
   Copy-Item -LiteralPath (Join-Path $repoRoot $file) -Destination (Join-Path $TargetPluginDir $file) -Force
-}
-foreach ($dir in $requiredDirs) {
-  Copy-Item -LiteralPath (Join-Path $repoRoot $dir) -Destination (Join-Path $TargetPluginDir $dir) -Recurse -Force
 }
 
 Write-Host '==> Déploiement terminé.'

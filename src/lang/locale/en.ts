@@ -25,6 +25,17 @@ export default {
   'PDF.js worker installed. Reload Obsidian to apply.':
     'PDF.js worker installed. Reload Obsidian to apply.',
   'PDF.js worker download failed.': 'PDF.js worker download failed.',
+  'Download EPUB reader': 'Download EPUB reader',
+  'Installs foliate-view.mjs next to main.js (required for the built-in EPUB reader). Reload Obsidian after install.':
+    'Installs foliate-view.mjs next to main.js (required for the built-in EPUB reader). Reload Obsidian after install.',
+  'Downloading EPUB reader (foliate)…': 'Downloading EPUB reader (foliate)…',
+  'foliate-view.mjs is already in the plugin folder.':
+    'foliate-view.mjs is already in the plugin folder.',
+  'EPUB reader installed. Reload Obsidian to apply.':
+    'EPUB reader installed. Reload Obsidian to apply.',
+  'EPUB reader download failed.': 'EPUB reader download failed.',
+  'EPUB reader requires foliate-view.mjs — download it in plugin settings.':
+    'EPUB reader requires foliate-view.mjs — download it in plugin settings.',
 
   // src/settings.ts
   'Path to bibliography file': 'Path to bibliography file',

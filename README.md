@@ -174,8 +174,8 @@ Le build produit notamment :
 
 - `main.js` (bundle ; non versionné — fourni par les [releases GitHub](https://github.com/Atelier-Recherche/pandocit/releases))
 - `manifest.json`, `styles.css`
-- `pdf.worker.min.mjs`, dossier `pdfjs/` (lecteur PDF)
-- `pdf-assets/`, `foliate/` (assets copiés depuis les dépendances)
+- `pdf.worker.min.mjs`, `foliate-view.mjs` (optionnels dans le coffre ; worker embarqué dans `main.js`, lecteur EPUB téléchargeable depuis les réglages)
+- `pdf-assets/`, `foliate/` (générés au build, non versionnés ; `foliate/` sert au bundle `foliate-view.mjs`)
 
 **Déploiement local** (Windows) :
 
@@ -183,9 +183,9 @@ Le build produit notamment :
 .\Deploy-LocalPlugin.ps1
 ```
 
-Copie `main.js`, `manifest.json`, `styles.css`, `pdf.worker.min.mjs` et `pdfjs/` vers le dossier plugin Obsidian (préserve `data.json` et `pandoc.wasm`).
+Copie `main.js`, `manifest.json`, `styles.css`, `pdf.worker.min.mjs` et `foliate-view.mjs` vers le dossier plugin Obsidian (préserve `data.json` et `pandoc.wasm`).
 
-**Release** : `.\Release-Plugin.ps1` incrémente la version, build, commit, tag et push ; la [workflow release](.github/workflows/release.yml) publie **uniquement** `main.js`, `manifest.json` et `styles.css` (exigence du [catalogue Obsidian](https://docs.obsidian.md/Reference/Releasing+your+plugin)). Le worker PDF est **inclus dans `main.js`** ; un téléchargement optionnel de `pdf.worker.min.mjs` est proposé dans les **réglages du plugin** (comme pour `pandoc.wasm`). Pour `pdfjs/` et déploiement complet : BRAT ou `.\Deploy-LocalPlugin.ps1`.
+**Release** : `.\Release-Plugin.ps1` incrémente la version, build, commit, tag et push ; la [workflow release](.github/workflows/release.yml) publie **uniquement** `main.js`, `manifest.json` et `styles.css` (exigence du [catalogue Obsidian](https://docs.obsidian.md/Reference/Releasing+your+plugin)). Le worker PDF est **inclus dans `main.js`** ; un téléchargement optionnel de `pdf.worker.min.mjs` est proposé dans les **réglages du plugin** (comme pour `pandoc.wasm`).
 
 Dans le coffre, installez aussi **`pandoc.wasm`** via les réglages du plugin (obligatoire pour les bibliographies non-JSON).
 
