@@ -633,6 +633,9 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .pwc-zotero-library__heading-row {
@@ -666,8 +669,10 @@ body.pwc-cite-tap-mode .pwc-tooltip {
 }
 
 .pwc-zotero-library__list {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -682,6 +687,9 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   padding: 0.45rem 0.35rem;
   border-radius: var(--radius-s);
   border: 1px solid var(--background-modifier-border);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .pwc-zotero-library__row.is-conflict {
@@ -696,12 +704,15 @@ body.pwc-cite-tap-mode .pwc-tooltip {
 .pwc-zotero-library__title {
   font-weight: 500;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .pwc-zotero-library__citekey {
   font-size: var(--font-ui-smaller);
-  font-family: var(--font-monospace-theme);
-  opacity: 0.85;
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .pwc-zotero-library__actions {
@@ -710,7 +721,7 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   gap: 0.25rem;
   justify-content: flex-end;
   align-items: center;
-  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .pwc-zotero-library__btn-edit {
@@ -721,6 +732,11 @@ body.pwc-cite-tap-mode .pwc-tooltip {
 .pwc-zotero-library__empty {
   opacity: 0.75;
   font-size: var(--font-ui-smaller);
+}
+
+.pwc-zotero-library__load-sentinel {
+  height: 1px;
+  width: 100%;
 }
 
 .pwc-zotero-item-modal-shell {
@@ -828,6 +844,9 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   margin-left: 0.75rem;
   padding-left: 0.35rem;
   border-left: 1px solid var(--background-modifier-border);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .pwc-zotero-library__tree-nest--collapsed {
@@ -845,6 +864,8 @@ body.pwc-cite-tap-mode .pwc-tooltip {
 
 .pwc-zotero-library__tree-row {
   margin-bottom: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .pwc-zotero-library__badge {
@@ -933,7 +954,7 @@ body.pwc-cite-tap-mode .pwc-tooltip {
   width: 100%;
   min-height: 2.5rem;
   resize: vertical;
-  font-family: var(--font-monospace-theme);
+  font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
 }
 
@@ -983,36 +1004,71 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
 
 .pwc-shell__tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  padding: 0.35rem 0.5rem 0;
-  border-bottom: 1px solid var(--background-modifier-border);
+  align-items: flex-end;
+  gap: 2px;
+  padding: 0.3rem 0.4rem 0;
+  background: var(--tab-container-background, var(--background-secondary));
+  border-bottom: 1px solid var(--tab-divider-color, var(--background-modifier-border));
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.pwc-shell__tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .pwc-shell__tab {
-  font-size: var(--font-ui-small);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: var(--tab-font-size, var(--font-ui-small));
+  font-weight: var(--tab-font-weight, 500);
   line-height: 1.2;
-  padding: 0.38rem 0.6rem 0.45rem;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
-  background: var(--background-secondary);
-  color: var(--text-muted);
-  border: 1px solid transparent;
-  border-bottom: none;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--tab-radius, var(--radius-s)) var(--tab-radius, var(--radius-s))
+    0 0;
+  background: transparent;
+  color: var(--tab-text-color, var(--text-muted));
+  border: none;
+  box-shadow: none;
   cursor: pointer;
-  transform: translateY(1px);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pwc-shell__tab:hover {
-  color: var(--text-normal);
+  color: var(--tab-text-color-focused, var(--text-normal));
   background: var(--background-modifier-hover);
+  box-shadow: none;
 }
 
 .pwc-shell__tab.is-active {
-  background: var(--background-primary);
-  border-color: var(--background-modifier-border);
-  color: var(--text-normal);
-  font-weight: 600;
+  background: var(--tab-background-active, var(--background-primary));
+  color: var(--tab-text-color-focused-active-current, var(--text-normal));
+  border-radius: var(--tab-radius-active, var(--radius-s))
+    var(--tab-radius-active, var(--radius-s)) 0 0;
+}
+
+.pwc-shell__tab-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  --icon-size: 15px;
+}
+
+.pwc-shell__tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pwc-shell--narrow .pwc-shell__tab {
+  padding: 0.45rem;
+}
+
+.pwc-shell--narrow .pwc-shell__tab-label {
+  display: none;
 }
 
 .pwc-shell__panels {
@@ -1038,12 +1094,16 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
 .pwc-shell__panel--zotero,
 .pwc-shell__panel--document-annotations {
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .pwc-zotero-library__ann-search-label {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--font-ui-smaller);
   margin-top: 0.35rem;
   color: var(--text-muted);

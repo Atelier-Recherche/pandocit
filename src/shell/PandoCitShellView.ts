@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 
 import { t } from '../lang/helpers';
 import type ReferenceList from '../main';
@@ -16,12 +16,22 @@ const SHELL_TABS: ShellTab[] = [
   'document-annotations',
 ];
 
+/** Largeur du panneau (px) en dessous de laquelle seules les icônes des onglets sont affichées. */
+const NARROW_SHELL_WIDTH = 230;
+
+const SHELL_TAB_ICONS: Record<ShellTab, string> = {
+  references: 'quote-glyph',
+  zotero: 'library',
+  'document-annotations': 'highlighter',
+};
+
 export class PandoCitShellView extends ItemView {
   plugin: ReferenceList;
   activeTab: ShellTab = 'references';
   private tabsEl: HTMLElement;
   private panelsEl: HTMLElement;
   private panelHosts = new Map<ShellTab, HTMLElement>();
+  private narrowObserver: ResizeObserver | null = null;
   refsPanel: ReferenceListPanel;
   zoteroPanel: ZoteroLibraryPanel | null = null;
   docPanel: DocumentAnnotationsPanel | null = null;
@@ -50,6 +60,14 @@ export class PandoCitShellView extends ItemView {
       pending && SHELL_TABS.includes(pending) ? pending : 'references'
     );
     plugin.pendingShellTab = undefined;
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.narrowObserver = new ResizeObserver((entries) => {
+        const width = entries[0]?.contentRect.width ?? this.contentEl.clientWidth;
+        this.contentEl.toggleClass('pwc-shell--narrow', width < NARROW_SHELL_WIDTH);
+      });
+      this.narrowObserver.observe(this.contentEl);
+    }
   }
 
   getViewType(): string {
@@ -78,11 +96,22 @@ export class PandoCitShellView extends ItemView {
   private buildTabs(): void {
     this.tabsEl.empty();
     for (const tab of SHELL_TABS) {
+      const label = this.tabLabel(tab);
       const btn = this.tabsEl.createEl('button', {
         cls: 'pwc-shell__tab',
-        text: this.tabLabel(tab),
-        attr: { type: 'button', 'data-tab': tab },
+        attr: {
+          type: 'button',
+          'data-tab': tab,
+          'aria-label': label,
+          title: label,
+        },
       });
+      const iconEl = btn.createSpan({
+        cls: 'pwc-shell__tab-icon',
+        attr: { 'aria-hidden': 'true' },
+      });
+      setIcon(iconEl, SHELL_TAB_ICONS[tab]);
+      btn.createSpan({ cls: 'pwc-shell__tab-label', text: label });
       btn.addEventListener('click', () => this.switchTab(tab));
     }
   }
@@ -124,5 +153,10 @@ export class PandoCitShellView extends ItemView {
 
   async onOpen(): Promise<void> {
     if (this.activeTab === 'zotero') await this.zoteroPanel?.refreshList();
+  }
+
+  async onClose(): Promise<void> {
+    this.narrowObserver?.disconnect();
+    this.narrowObserver = null;
   }
 }

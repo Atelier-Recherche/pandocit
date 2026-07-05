@@ -131,6 +131,8 @@ export class ZoteroLibraryPanel {
   private attachmentChildrenByParent = new Map<string, StoredZoteroItem[]>();
   private annotationFilterAttachmentKey: string | null = null;
   private annotationFilterAttachmentLabel = '';
+  /** Observateurs de scroll actifs pour le chargement par lots (nettoyés à chaque re-rendu). */
+  private activeBatchObservers: IntersectionObserver[] = [];
   private syncBtn: HTMLButtonElement;
   private importPdfBtn: HTMLButtonElement;
   private bibExportBtn: HTMLButtonElement;
@@ -725,8 +727,57 @@ export class ZoteroLibraryPanel {
     this.render();
   }
 
+  private disconnectBatchObservers(): void {
+    for (const obs of this.activeBatchObservers) obs.disconnect();
+    this.activeBatchObservers = [];
+  }
+
+  /**
+   * Rend une longue liste par lots pour limiter le nombre de nœuds DOM créés d'un coup :
+   * un premier lot est rendu immédiatement, le reste au fil du scroll (sentinelle + IntersectionObserver).
+   */
+  private renderListBatched<T>(
+    items: T[],
+    renderItem: (item: T) => void,
+    batchSize = 150
+  ): void {
+    const host = this.listEl;
+    let idx = 0;
+    const renderBatch = () => {
+      const prevListEl = this.listEl;
+      this.listEl = host;
+      const end = Math.min(idx + batchSize, items.length);
+      for (; idx < end; idx++) renderItem(items[idx]);
+      this.listEl = prevListEl;
+    };
+    renderBatch();
+    if (idx >= items.length) return;
+
+    const sentinel = host.createDiv({
+      cls: 'pwc-zotero-library__load-sentinel',
+    });
+    const scrollRoot = host.closest(
+      '.pwc-zotero-library__list'
+    ) as HTMLElement | null;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        renderBatch();
+        host.appendChild(sentinel);
+        if (idx >= items.length) {
+          observer.disconnect();
+          sentinel.remove();
+        }
+      },
+      { root: scrollRoot, rootMargin: '200px' }
+    );
+    observer.observe(sentinel);
+    this.activeBatchObservers.push(observer);
+  }
+
   render() {
     const q = this.filterInput?.value?.trim() ?? '';
+    this.disconnectBatchObservers();
     this.listEl.empty();
 
     if (!this.flatRows.length && !this.treeRoots.length) {
@@ -755,9 +806,7 @@ export class ZoteroLibraryPanel {
         cls: 'pwc-zotero-library__filter-hint',
         text: t('Filtered flat list — clear search for tree'),
       });
-      for (const row of hits) {
-        this.renderRowFlat(row);
-      }
+      this.renderListBatched(hits, (row) => this.renderRowFlat(row));
       return;
     }
 
@@ -836,46 +885,48 @@ export class ZoteroLibraryPanel {
         text: t('Type to search all Zotero annotations'),
       });
     }
-    for (const row of rows) {
-      const wrap = this.listEl.createDiv({
-        cls: 'pwc-zotero-library__tree-row pwc-zotero-library__tree-row--flat',
-      });
-      const rowEl = wrap.createDiv({ cls: 'pwc-zotero-library__row' });
-      const meta = rowEl.createDiv({ cls: 'pwc-zotero-library__meta' });
-      meta.createDiv({
-        cls: 'pwc-zotero-library__badge',
-        text: t('Badge annotation'),
-      });
-      const excerpt =
-        row.annotationText.replace(/<[^>]+>/g, '').trim().slice(0, 120) ||
-        row.annotationComment.replace(/<[^>]+>/g, '').trim().slice(0, 80) ||
-        row.key;
-      meta.createDiv({ cls: 'pwc-zotero-library__title', text: excerpt });
-      meta.createDiv({
-        cls: 'pwc-zotero-library__citekey',
-        text: `${row.topItemTitle}${row.citekey ? ` · @${row.citekey}` : ''}${
-          row.annotationPageLabel ? ` · p.${row.annotationPageLabel}` : ''
-        }`,
-      });
-      const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
-      const copyBtn = actions.createEl('button', {
-        cls: 'clickable-icon',
-        attr: {
-          type: 'button',
-          'aria-label': t('Copy annotation reference'),
-          title: t('Copy annotation reference'),
-        },
-      });
-      setIcon(copyBtn, 'copy');
-      copyBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        void this.copyZoteroAnnotationReference(row);
-      });
-      rowEl.addEventListener('click', () => {
-        void this.openAnnotationTarget(row);
-      });
-    }
+    this.renderListBatched(rows, (row) => this.renderAnnotationRow(row));
+  }
+
+  private renderAnnotationRow(row: ZoteroAnnotationRow): void {
+    const wrap = this.listEl.createDiv({
+      cls: 'pwc-zotero-library__tree-row pwc-zotero-library__tree-row--flat',
+    });
+    const rowEl = wrap.createDiv({ cls: 'pwc-zotero-library__row' });
+    const meta = rowEl.createDiv({ cls: 'pwc-zotero-library__meta' });
+    meta.createDiv({
+      cls: 'pwc-zotero-library__badge',
+      text: t('Badge annotation'),
+    });
+    const excerpt =
+      row.annotationText.replace(/<[^>]+>/g, '').trim().slice(0, 120) ||
+      row.annotationComment.replace(/<[^>]+>/g, '').trim().slice(0, 80) ||
+      row.key;
+    meta.createDiv({ cls: 'pwc-zotero-library__title', text: excerpt });
+    meta.createDiv({
+      cls: 'pwc-zotero-library__citekey',
+      text: `${row.topItemTitle}${row.citekey ? ` · @${row.citekey}` : ''}${
+        row.annotationPageLabel ? ` · p.${row.annotationPageLabel}` : ''
+      }`,
+    });
+    const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
+    const copyBtn = actions.createEl('button', {
+      cls: 'clickable-icon',
+      attr: {
+        type: 'button',
+        'aria-label': t('Copy annotation reference'),
+        title: t('Copy annotation reference'),
+      },
+    });
+    setIcon(copyBtn, 'copy');
+    copyBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void this.copyZoteroAnnotationReference(row);
+    });
+    rowEl.addEventListener('click', () => {
+      void this.openAnnotationTarget(row);
+    });
   }
 
   private async copyZoteroAnnotationReference(
@@ -925,9 +976,9 @@ export class ZoteroLibraryPanel {
         text: node.title,
       });
       void h;
-      for (const ch of node.children) {
-        this.renderTreeNode(ch, depth);
-      }
+      this.renderListBatched(node.children, (ch) =>
+        this.renderTreeNode(ch, depth)
+      );
       return;
     }
 
@@ -941,17 +992,28 @@ export class ZoteroLibraryPanel {
         text: node.title,
       });
       const inner = det.createDiv({ cls: 'pwc-zotero-library__details-inner' });
-      const prev = this.listEl;
-      this.listEl = inner;
-      for (const ch of node.children) {
-        this.renderTreeNode(ch, depth + 1);
-      }
-      this.listEl = prev;
+      // Contenu construit paresseusement à la première ouverture pour éviter des
+      // milliers de nœuds DOM créés d'un coup dans les grosses bibliothèques.
+      let populated = false;
+      const populate = () => {
+        if (populated) return;
+        populated = true;
+        const prev = this.listEl;
+        this.listEl = inner;
+        this.renderListBatched(node.children, (ch) =>
+          this.renderTreeNode(ch, depth + 1)
+        );
+        this.listEl = prev;
+      };
+      det.addEventListener('toggle', () => {
+        if (det.open) populate();
+      });
       return;
     }
 
     let nestEl: HTMLElement | null = null;
     const hasSubtree = node.children.length > 0;
+    let nestPopulated = false;
 
     const wrap = this.listEl.createDiv({
       cls: 'pwc-zotero-library__tree-row',
@@ -976,27 +1038,32 @@ export class ZoteroLibraryPanel {
     const actions = rowEl.createDiv({ cls: 'pwc-zotero-library__actions' });
     this.attachRowActions(actions, node.stored, node.citekey);
 
+    // Le sous-arbre (nest) n'est peuplé qu'au premier dépliement (voir renderPdfStripInRow).
+    if (node.children.length) {
+      nestEl = wrap.createDiv({
+        cls: 'pwc-zotero-library__tree-nest pwc-zotero-library__tree-nest--collapsed',
+      });
+    }
+
     this.renderPdfStripInRow(
       rowEl,
       node.inlineAttachments,
       hasSubtree
         ? {
             getNestEl: () => nestEl,
+            ensurePopulated: () => {
+              if (nestPopulated || !nestEl) return;
+              nestPopulated = true;
+              const prev = this.listEl;
+              this.listEl = nestEl;
+              this.renderListBatched(node.children, (ch) =>
+                this.renderTreeNode(ch, depth + 1)
+              );
+              this.listEl = prev;
+            },
           }
         : undefined
     );
-
-    if (node.children.length) {
-      nestEl = wrap.createDiv({
-        cls: 'pwc-zotero-library__tree-nest pwc-zotero-library__tree-nest--collapsed',
-      });
-      const prev = this.listEl;
-      this.listEl = nestEl;
-      for (const ch of node.children) {
-        this.renderTreeNode(ch, depth + 1);
-      }
-      this.listEl = prev;
-    }
   }
 
   private renderRowFlat(row: RowFlat) {
@@ -1079,6 +1146,8 @@ export class ZoteroLibraryPanel {
     nestToggle?: {
       /** Réf mis à jour après création du `tree-nest` (clics ultérieurs uniquement). */
       getNestEl: () => HTMLElement | null;
+      /** Construit le contenu du sous-arbre au premier dépliement (rendu paresseux). */
+      ensurePopulated: () => void;
     }
   ) {
     const hasPdf = !!(attachments?.length);
@@ -1107,6 +1176,7 @@ export class ZoteroLibraryPanel {
         const collapsed = nest.classList.toggle(
           'pwc-zotero-library__tree-nest--collapsed'
         );
+        if (!collapsed) nestToggle.ensurePopulated();
         setIcon(btn, collapsed ? 'chevron-right' : 'chevron-down');
         btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       });
