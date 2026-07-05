@@ -11,8 +11,7 @@ function highlightGroup(
 ): SVGGElement {
   const g = document.createElementNS(SVG_NS, 'g');
   g.setAttribute('fill', color);
-  g.style.opacity = String(opacity);
-  g.style.mixBlendMode = 'multiply';
+  g.setCssStyles({ opacity: String(opacity), mixBlendMode: 'multiply' });
   for (const { left, top, height, width } of rects) {
     const el = document.createElementNS(SVG_NS, 'rect');
     el.setAttribute('x', String(left - padding));

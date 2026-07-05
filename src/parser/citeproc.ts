@@ -125,10 +125,32 @@ export function getCiteprocCites(
   return { output, idToGroup };
 }
 
+/**
+ * citeproc-js échappe le texte en XML/HTML de base (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`,
+ * ainsi que des références numériques `&#123;`/`&#x1F;`) tout en laissant ses propres balises de
+ * mise en forme (`<i>`, `<b>`, ...) littérales. On décode donc uniquement ces entités via une
+ * substitution de chaînes, sans jamais faire analyser la chaîne comme du HTML par le DOM
+ * (contrairement à l'ancien tour de passe-passe `textarea.innerHTML`), afin de préserver les
+ * balises de mise en forme telles quelles pour le rendu ultérieur (DOMParser côté appelant).
+ */
+const HTML_NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00A0',
+};
+
 function decodeHtml(str: string) {
-  const txt = document.createElement('textarea');
-  txt.innerHTML = str;
-  return txt.value;
+  return str.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity[0] === '#') {
+      const isHex = entity[1] === 'x' || entity[1] === 'X';
+      const code = isHex ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return HTML_NAMED_ENTITIES[entity] ?? match;
+  });
 }
 
 function sanitize(val: string) {

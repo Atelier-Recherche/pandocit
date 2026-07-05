@@ -53,8 +53,8 @@ export function CslSearchField({
 
   useEffect(() => {
     if (!menuOpen) return;
-    const handle = activeWindow.setTimeout(() => runSearch(query), 120);
-    return () => activeWindow.clearTimeout(handle);
+    const handle = window.setTimeout(() => runSearch(query), 120);
+    return () => window.clearTimeout(handle);
   }, [query, menuOpen, runSearch]);
 
   const pick = (opt: CslSearchOption) => {
@@ -113,7 +113,7 @@ export function CslSearchField({
             }
           }}
           onBlur={() => {
-            activeWindow.setTimeout(() => setMenuOpen(false), 160);
+            window.setTimeout(() => setMenuOpen(false), 160);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {

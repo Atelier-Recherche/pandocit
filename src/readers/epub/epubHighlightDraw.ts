@@ -15,8 +15,7 @@ export function epubHighlightDraw(
   const { color = '#ffd400', padding = 0 } = options;
   const g = document.createElementNS(SVG_NS, 'g');
   g.setAttribute('fill', color);
-  g.style.opacity = '0.35';
-  g.style.mixBlendMode = 'multiply';
+  g.setCssStyles({ opacity: '0.35', mixBlendMode: 'multiply' });
 
   for (const { left, top, height, width } of rects) {
     const el = document.createElementNS(SVG_NS, 'rect');

@@ -373,7 +373,7 @@ export function copyElToClipboard(el: HTMLElement) {
 
   if (Platform.isDesktop) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
       const { clipboard } = require('electron');
       clipboard.write({ html, text });
       return;

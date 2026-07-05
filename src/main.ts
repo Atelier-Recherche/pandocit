@@ -180,7 +180,6 @@ export default class ReferenceList extends Plugin {
     this.addCommand({
       id: 'insert-citekey',
       name: t('Insert citation…'),
-      hotkeys: [{ modifiers: ['Mod', 'Shift'], key: 'c' }],
       editorCheckCallback: (checking, _editor, view) => {
         if (!(view instanceof MarkdownView)) return false;
         if (checking) return true;

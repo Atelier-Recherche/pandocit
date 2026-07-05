@@ -46,7 +46,6 @@ export async function readBibliographyFile(
     const anyApp = app as any;
     if (anyApp?.vault?.adapter?.read && getVaultRoot) {
       const root = getVaultRoot();
-      const norm = root ? resolved.replace(/\\/g, '/').replace(root.replace(/\\/g, '/'), '').replace(/^\//, '') : resolved.replace(/\\/g, '/');
       if (!root || resolved.startsWith(root) || !path.isAbsolute(resolved)) {
         const rel = root && resolved.startsWith(root)
           ? resolved.slice(root.length).replace(/^[\\/]/, '')
@@ -179,7 +178,7 @@ export async function getCSLStyle(
           return data;
         }
       }
-    } catch (e) {
+    } catch {
       throw new Error(`Error: cannot read style file '${explicitPath}'.`);
     }
   }
@@ -227,9 +226,8 @@ export const defaultHeaders = {
 };
 
 function getGlobal() {
-  if (typeof window !== 'undefined' && (window as any).activeWindow) return (window as any).activeWindow;
-  if (typeof window !== 'undefined') return window;
-  return typeof global !== 'undefined' ? global : ({} as any);
+  if ((window as any).activeWindow) return (window as any).activeWindow;
+  return window;
 }
 
 export async function getZUserGroups(

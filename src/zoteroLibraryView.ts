@@ -1411,8 +1411,7 @@ class ZoteroNoteEditModal extends Modal {
       text: String(this.item.data.note ?? ''),
     });
     ta.rows = 18;
-    ta.style.width = '100%';
-    ta.style.minHeight = '280px';
+    ta.setCssStyles({ width: '100%', minHeight: '280px' });
 
     new Setting(contentEl).addButton((b) =>
       b
@@ -1461,9 +1460,11 @@ class ZoteroItemEditModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('pwc-zotero-edit-modal');
-    contentEl.style.maxHeight = 'min(85vh, 900px)';
-    contentEl.style.overflowY = 'auto';
-    contentEl.style.width = '100%';
+    contentEl.setCssStyles({
+      maxHeight: 'min(85vh, 900px)',
+      overflowY: 'auto',
+      width: '100%',
+    });
     this.contentEl.closest('.modal')?.addClass('pwc-zotero-item-modal-shell');
 
     this.titleEl.setText(t('Edit reference'));
@@ -1874,7 +1875,7 @@ class ZoteroItemEditModal extends Modal {
         );
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
       const picked = require('electron').remote.dialog.showOpenDialogSync({
         defaultPath: getVaultRoot() || undefined,
         properties: ['openFile'],

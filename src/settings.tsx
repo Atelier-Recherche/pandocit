@@ -32,7 +32,6 @@ import { setPluginUiLocale } from './lang/helpers';
 import {
   isFormattedCitationsEnabled,
   setFormattedCitationsEnabled,
-  syncCitationUiClasses,
 } from './citationUi';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
@@ -272,7 +271,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               return;
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
             const path = require('electron').remote.dialog.showOpenDialogSync(
               {
                 properties: ['openFile'],
@@ -352,7 +351,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               return;
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
             const path = require('electron').remote.dialog.showOpenDialogSync(
               {
                 properties: ['openFile'],

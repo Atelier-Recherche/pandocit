@@ -47,5 +47,6 @@ async function resolveFoliateViewUrl(plugin: ReferenceList): Promise<string> {
 export async function ensureFoliateLoaded(plugin: ReferenceList): Promise<void> {
   if (customElements.get('foliate-view')) return;
   const viewUrl = await resolveFoliateViewUrl(plugin);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- viewUrl est une ressource du plugin lui-même (bundle ou fallback local), typée `string` par resolveFoliateViewUrl, jamais une entrée utilisateur/réseau
   await import(/* webpackIgnore: true */ viewUrl);
 }

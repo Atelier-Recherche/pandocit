@@ -81,9 +81,9 @@ export function schedulePandocitReaderSwap(
   };
 
   // Obsidian ouvre d'abord le PDF natif : attendre la fin du cycle layout.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      setTimeout(run, 0);
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(run, 0);
     });
   });
 }

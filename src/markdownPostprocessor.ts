@@ -16,7 +16,6 @@ function onlyValType(segs: Segment[]) {
   return segs.map((s) => ({ type: s.type, val: s.val }));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function processCiteKeys(plugin: ReferenceList) {
   return (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
     const toRemove: Node[] = [];

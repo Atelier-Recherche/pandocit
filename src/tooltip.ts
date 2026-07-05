@@ -28,9 +28,11 @@ function layoutCitationTooltip(
     citationInfoUsesTap() ? TOOLTIP_MAX_WIDTH_TAP : TOOLTIP_MAX_WIDTH_DESKTOP,
     vw - pad * 2
   );
-  tooltip.style.maxWidth = `${Math.max(120, maxW)}px`;
-  tooltip.style.left = '0px';
-  tooltip.style.top = '0px';
+  tooltip.setCssStyles({
+    maxWidth: `${Math.max(120, maxW)}px`,
+    left: '0px',
+    top: '0px',
+  });
 
   const availH = Math.max(80, vh - pad * 2);
   tooltip.style.maxHeight = `${availH}px`;
@@ -138,7 +140,9 @@ export class TooltipManager {
             if (!target) target = html;
             const inner = target.innerHTML;
             const clipped = clip(inner, 100, { html: true });
-            target.innerHTML = clipped;
+            target.empty();
+            const parsedClip = new DOMParser().parseFromString(clipped, 'text/html');
+            target.append(...Array.from(parsedClip.body.childNodes));
           }
           content.append(html);
         }

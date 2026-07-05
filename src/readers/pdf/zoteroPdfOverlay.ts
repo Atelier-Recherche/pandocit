@@ -1,4 +1,4 @@
-import { Notice, TFile, setIcon } from 'obsidian';
+import { TFile, setIcon } from 'obsidian';
 
 import {
   copyAnnotationReferenceNotice,
@@ -63,16 +63,18 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
         const el = layer.createDiv({
           cls: `pwc-zotero-overlay-rect pwc-zotero-overlay-rect--${markup}`,
         });
-        el.style.left = `${(rect.x / pageSize.width) * 100}%`;
-        el.style.top = `${(rect.y / pageSize.height) * 100}%`;
-        el.style.width = `${(rect.width / pageSize.width) * 100}%`;
-        el.style.height = `${(rect.height / pageSize.height) * 100}%`;
+        el.setCssStyles({
+          left: `${(rect.x / pageSize.width) * 100}%`,
+          top: `${(rect.y / pageSize.height) * 100}%`,
+          width: `${(rect.width / pageSize.width) * 100}%`,
+          height: `${(rect.height / pageSize.height) * 100}%`,
+          pointerEvents: 'auto',
+        });
         el.style.setProperty('--pwc-ann-color', ann.color || '#ffd400');
         if (markup === 'highlight') {
           el.style.background = ann.color || '#ffd400';
         }
         el.title = ann.comment || ann.text || 'Zotero annotation';
-        el.style.pointerEvents = 'auto';
         el.addEventListener('click', (evt) => {
           evt.preventDefault();
           evt.stopPropagation();

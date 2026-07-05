@@ -1164,7 +1164,6 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   opacity: 0.95;
   mix-blend-mode: normal;
   background: transparent !important;
-  box-shadow: none;
   border-radius: 0;
   box-shadow: inset 0 -2px 0 0 var(--pwc-ann-color, #ffd400);
 }
@@ -1185,7 +1184,6 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   opacity: 0.9;
   mix-blend-mode: normal;
   background: transparent !important;
-  box-shadow: none;
   border-radius: 0;
   box-shadow: inset 0 50% 0 0 transparent,
     inset 0 calc(50% - 1px) 0 0 var(--pwc-ann-color, #ffd400);

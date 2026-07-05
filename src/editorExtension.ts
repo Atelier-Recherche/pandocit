@@ -181,7 +181,7 @@ class CiteWidget extends WidgetType {
           span.addClass('is-link');
           span.addEventListener('click', (evt) => {
             const newPane = Keymap.isModEvent(evt);
-            activeWindow.setTimeout(() => {
+            window.setTimeout(() => {
               app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,
@@ -202,7 +202,7 @@ class CiteWidget extends WidgetType {
         }
 
         if (this.inInlineFootnote) {
-          activeWindow.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
             syncInlineFootnoteTypography(span);
           });
         }

@@ -480,7 +480,7 @@ export class BibManager {
           bibPath,
           fsApi.watch(bibPath, (evt) => {
             if (evt === 'change') {
-              clearTimeout(dbTimer);
+              window.clearTimeout(dbTimer);
               dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
                 this.loadGlobalBibFile().then(() => {
                   this.fileCache.clear();
@@ -943,7 +943,7 @@ export class BibManager {
           bibPath,
           fsApi.watch(bibPath, (evt) => {
             if (evt === 'change') {
-              clearTimeout(dbTimer);
+              window.clearTimeout(dbTimer);
               dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
                 this.fileCache.delete(file);
                 this.plugin.processReferences();

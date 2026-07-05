@@ -6,7 +6,7 @@ import {
   PreopenDirectory,
 } from '@bjorn3/browser_wasi_shim';
 
-type PandocOptions = Record<string, any>;
+type PandocOptions = Record<string, unknown>;
 
 interface ConvertResult {
   stdout: string;
@@ -14,18 +14,32 @@ interface ConvertResult {
   warnings: unknown[];
 }
 
+/** Forme réelle des exports du module WASM pandoc, plus précise que `WebAssembly.Exports`. */
+interface PandocWasmExports {
+  memory: WebAssembly.Memory;
+  malloc: (size: number) => number;
+  hs_init_with_rtsopts: (argcPtr: number, argvPtr: number) => void;
+  convert: (optsPtr: number, optsLen: number) => void;
+  __wasm_call_ctors?: () => void;
+}
+
+/** Forme minimale attendue par `WASI#initialize` (voir @bjorn3/browser_wasi_shim). */
+type WasiInitInstance = { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } };
+
 let wasi: WASI | null = null;
 let instance: WebAssembly.Instance | null = null;
 let fileSystem: Map<string, File> | null = null;
 let initialized = false;
 
+function getWasmExports(inst: WebAssembly.Instance): PandocWasmExports {
+  return inst.exports as unknown as PandocWasmExports;
+}
+
 function getMemoryDataView() {
   if (!instance) {
     throw new Error('pandoc.wasm is not initialized');
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mem = (instance.exports as any).memory as WebAssembly.Memory;
-  return new DataView(mem.buffer);
+  return new DataView(getWasmExports(instance).memory.buffer);
 }
 
 async function instantiateWasm(): Promise<WebAssembly.Instance> {
@@ -33,11 +47,9 @@ async function instantiateWasm(): Promise<WebAssembly.Instance> {
 
   if ('instantiateStreaming' in WebAssembly) {
     try {
-      const res = await WebAssembly.instantiateStreaming(
-        fetch(wasmUrl),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { wasi_snapshot_preview1: (wasi as any).wasiImport }
-      );
+      const res = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {
+        wasi_snapshot_preview1: wasi!.wasiImport,
+      });
       return res.instance;
     } catch {
       // Fallback below
@@ -47,8 +59,7 @@ async function instantiateWasm(): Promise<WebAssembly.Instance> {
   const response = await fetch(wasmUrl);
   const bytes = await response.arrayBuffer();
   const res = await WebAssembly.instantiate(bytes, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    wasi_snapshot_preview1: (wasi as any).wasiImport,
+    wasi_snapshot_preview1: wasi!.wasiImport,
   });
   return res.instance;
 }
@@ -60,8 +71,6 @@ async function initPandoc(): Promise<void> {
   const env: string[] = [];
 
   const stdinFile = new File(new Uint8Array(), { readonly: true });
-  const stdoutFile = new File(new Uint8Array(), { readonly: false });
-  const stderrFile = new File(new Uint8Array(), { readonly: false });
 
   fileSystem = new Map<string, File>();
   const fds = [
@@ -80,14 +89,12 @@ async function initPandoc(): Promise<void> {
     console.error('Failed to load pandoc.wasm', e);
     throw new Error('pandoc.wasm initialization failed');
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (wasi as any).initialize(instance);
+  wasi!.initialize(instance as unknown as WasiInitInstance);
 
   const view = getMemoryDataView();
 
   // Set up RTS (copied and adapted from upstream wasm/pandoc.js)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const exports = instance.exports as any;
+  const exports = getWasmExports(instance);
   const argcPtr = exports.malloc(4);
   view.setUint32(argcPtr, args.length, true);
 
@@ -96,12 +103,7 @@ async function initPandoc(): Promise<void> {
     const arg = exports.malloc(args[i].length + 1);
     new TextEncoder().encodeInto(
       args[i],
-      new Uint8Array(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (exports.memory as WebAssembly.Memory).buffer,
-        arg,
-        args[i].length
-      )
+      new Uint8Array(exports.memory.buffer, arg, args[i].length)
     );
     view.setUint8(arg + args[i].length, 0);
     view.setUint32(argv + 4 * i, arg, true);
@@ -143,20 +145,13 @@ async function convertInternal(
     throw new Error('pandoc.wasm failed to initialize');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const exports = instance.exports as any;
-  const view = getMemoryDataView();
+  const exports = getWasmExports(instance);
 
   const optsStr = JSON.stringify(options);
   const optsPtr = exports.malloc(optsStr.length);
   new TextEncoder().encodeInto(
     optsStr,
-    new Uint8Array(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (exports.memory as WebAssembly.Memory).buffer,
-      optsPtr,
-      optsStr.length
-    )
+    new Uint8Array(exports.memory.buffer, optsPtr, optsStr.length)
   );
 
   fileSystem.clear();
@@ -175,11 +170,11 @@ async function convertInternal(
     await addFileToFs(key, files[key], true);
   }
 
-  if (options['output-file']) {
+  if (typeof options['output-file'] === 'string') {
     await addFileToFs(options['output-file'], new Blob(), false);
   }
 
-  if (options['extract-media']) {
+  if (typeof options['extract-media'] === 'string') {
     await addFileToFs(options['extract-media'], new Blob(), false);
   }
 

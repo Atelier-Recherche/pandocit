@@ -8,13 +8,19 @@ const ENTRY_HEAD_RE = /@\w+\s*\{\s*([^,\s#}%]+)\s*,/g;
 const FILE_FIELD_RE = /file\s*=\s*(\{((?:[^{}]|\{[^{}]*\})*)\}|"([^"]*)")/gi;
 const DOCUMENT_EXT_RE = /\.(pdf|epub)(\b|$)/i;
 
-/** Supprime les commentaires % (hors \%). */
+/**
+ * Supprime les commentaires % (hors \%).
+ * Pas de lookbehind (non supporté sur iOS < 16.4) : on capture le caractère précédent
+ * (ou le début de ligne) et on le réinjecte dans le remplacement.
+ */
 export function stripBibTeXComments(source: string): string {
-  return source.replace(/(?<!\\)%.*$/gm, '');
+  return source.replace(/(^|[^\\])%.*$/gm, (_match, prefix: string) => prefix);
 }
 
 /**
  * Découpe un champ `file` BBT (chemins séparés par `:` ; attention aux lecteurs Windows).
+ * Pas de lookbehind/lookahead combinés (non supportés sur iOS < 16.4) : on repère les
+ * limites de coupe via des groupes capturants puis on reconstruit les segments à la main.
  */
 export function splitBibFileFieldValue(raw: string): string[] {
   const v = raw.trim();
@@ -22,12 +28,25 @@ export function splitBibFileFieldValue(raw: string): string[] {
 
   if (!v.includes(':')) return [v];
 
-  const multiDrive = /(?<=\.(?:pdf|epub|djvu|docx?|html?|txt|rtf|odt|mobi|azw\d?)):+(?=[A-Za-z]:[\\/])/gi;
-  if (multiDrive.test(v)) {
-    return v
-      .split(multiDrive)
-      .map((s) => s.trim())
-      .filter(Boolean);
+  const multiDriveSplit =
+    /(\.(?:pdf|epub|djvu|docx?|html?|txt|rtf|odt|mobi|azw\d?))(:+)(?=[A-Za-z]:[\\/])/gi;
+  const boundaries: Array<[number, number]> = [];
+  let dm: RegExpExecArray | null;
+  while ((dm = multiDriveSplit.exec(v)) !== null) {
+    const extEnd = dm.index + dm[1].length;
+    const colonsEnd = extEnd + dm[2].length;
+    boundaries.push([extEnd, colonsEnd]);
+  }
+
+  if (boundaries.length) {
+    const parts: string[] = [];
+    let cursor = 0;
+    for (const [extEnd, colonsEnd] of boundaries) {
+      parts.push(v.slice(cursor, extEnd));
+      cursor = colonsEnd;
+    }
+    parts.push(v.slice(cursor));
+    return parts.map((s) => s.trim()).filter(Boolean);
   }
 
   if (/^[A-Za-z]:[\\/]/.test(v)) return [v];

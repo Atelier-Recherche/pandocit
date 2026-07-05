@@ -7,7 +7,7 @@ import {
 
 import type { DocumentAnnotation } from '../../annotations/types';
 import { stripPwcMarker } from './pwcMarker';
-import { decodePdfField, pdfField } from './pdfLibField';
+import { pdfField } from './pdfLibField';
 
 type PdfRect = { x: number; y: number; width: number; height: number };
 
