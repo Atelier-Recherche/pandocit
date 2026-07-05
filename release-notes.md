@@ -1,1 +1,1 @@
-
+697d7da Enhance Zotero library view with batch rendering for improved performance and add responsive tab icons. Update CSS for better layout control and element sizing. Introduce IntersectionObserver for lazy loading of items in the library.
