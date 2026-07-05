@@ -1,3 +1,1 @@
-be9b02b Update version to 2.0.52 in manifest.json and package.json, and add version entry in versions.json.
-2ae4402 Update .gitignore and deployment scripts to include foliate-view.mjs for EPUB reader functionality. Modify README files to reflect changes in asset management and local deployment instructions. Enhance localization for new EPUB reader settings and ensure proper installation checks for foliate-view.mjs in the plugin settings.
-11ad3e3 Remove deprecated Foliate components including EPUB handling, comic book support, and dictionary functionalities. Clean up related configuration files and assets to streamline the project structure.
+
