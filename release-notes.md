@@ -1,1 +1,1 @@
-d534509 Refactor EPUB reader integration by removing legacy foliate-view.mjs references. Update related functions and settings to reflect that the EPUB reader is now bundled within main.js. Enhance localization strings for improved user feedback regarding EPUB reader availability.
+6f017ab Refactor esbuild configuration to improve build process. Introduce a new function to modify the foliate-view registration for better compatibility with Obsidian. Update build options and streamline the post-build process for asset copying.
