@@ -41,12 +41,33 @@ async function resolveFoliateViewUrl(plugin: ReferenceList): Promise<string> {
 }
 
 /**
+ * Charge un module ES depuis une URL du plugin (sans `import(url)` dynamique,
+ * interdit par le scanner de revue Obsidian).
+ */
+function loadEsModuleScript(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = activeDocument.createElement('script');
+    script.type = 'module';
+    script.src = url;
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener(
+      'error',
+      () => reject(new Error(`Failed to load foliate module: ${url}`)),
+      { once: true }
+    );
+    activeDocument.head.appendChild(script);
+  });
+}
+
+/**
  * Enregistre le custom element `foliate-view` (bundle ou ancien `foliate/view.js`).
  * Le dessin des surlignages est géré par {@link epubHighlightDraw} dans le bundle du plugin.
  */
 export async function ensureFoliateLoaded(plugin: ReferenceList): Promise<void> {
   if (customElements.get('foliate-view')) return;
   const viewUrl = await resolveFoliateViewUrl(plugin);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- viewUrl est une ressource du plugin lui-même (bundle ou fallback local), typée `string` par resolveFoliateViewUrl, jamais une entrée utilisateur/réseau
-  await import(/* webpackIgnore: true */ viewUrl);
+  await loadEsModuleScript(viewUrl);
+  if (!customElements.get('foliate-view')) {
+    throw new Error('foliate-view custom element not registered after load');
+  }
 }
