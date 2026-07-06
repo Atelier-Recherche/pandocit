@@ -61,8 +61,7 @@ $requiredFiles = @(
   'main.js',
   'manifest.json',
   'styles.css',
-  'pdf.worker.min.mjs',
-  'foliate-view.mjs'
+  'pdf.worker.min.mjs'
 )
 
 foreach ($file in $requiredFiles) {

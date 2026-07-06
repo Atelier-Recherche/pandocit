@@ -24,10 +24,6 @@ import {
   downloadAndInstallPdfWorker,
   isPdfWorkerInstalled,
 } from './pdfWorkerInstall';
-import {
-  downloadAndInstallFoliateView,
-  isFoliateViewInstalled,
-} from './foliateInstall';
 import { setPluginUiLocale } from './lang/helpers';
 import {
   isFormattedCitationsEnabled,
@@ -180,28 +176,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
   }
 
-  private async mountFoliateDownloadSetting(host: HTMLElement): Promise<void> {
-    host.empty();
-    const foliateInstalled = await isFoliateViewInstalled(this.plugin);
-    new Setting(host)
-      .setName(t('Download EPUB reader'))
-      .setDesc(
-        `${t(
-          'Installs foliate-view.mjs next to main.js (required for the built-in EPUB reader). Reload Obsidian after install.'
-        )}${foliateInstalled ? ` (${t('Installed')})` : ''}`
-      )
-      .addButton((btn) =>
-        btn
-          .setButtonText(t('Download EPUB reader'))
-          .setCta()
-          .setTooltip(t('Download EPUB reader'))
-          .onClick(async () => {
-            await downloadAndInstallFoliateView(this.plugin);
-            await this.mountFoliateDownloadSetting(host);
-          })
-      );
-  }
-
   display(): void {
     const { containerEl } = this;
 
@@ -231,9 +205,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     const pdfWorkerHost = containerEl.createDiv();
     void this.mountPdfWorkerDownloadSetting(pdfWorkerHost);
-
-    const foliateHost = containerEl.createDiv();
-    void this.mountFoliateDownloadSetting(foliateHost);
 
     new Setting(containerEl)
       .setName(t('Path to bibliography file'))

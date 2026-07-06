@@ -36,6 +36,10 @@ export default {
   'EPUB reader download failed.': 'Error al descargar el lector EPUB.',
   'EPUB reader requires foliate-view.mjs — download it in plugin settings.':
     'El lector EPUB requiere foliate-view.mjs — descárguelo en los ajustes del plugin.',
+  'EPUB reader is bundled in main.js.':
+    'El lector EPUB está incluido en main.js.',
+  'EPUB reader unavailable — reload Obsidian or reinstall the plugin.':
+    'Lector EPUB no disponible — recargue Obsidian o reinstale el plugin.',
 
   'Path to bibliography file': 'Ruta del archivo de bibliografía',
   'The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file\'s frontmatter.':

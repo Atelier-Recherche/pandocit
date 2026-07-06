@@ -52,7 +52,6 @@ jobs:
           test -f main.js
           test -f manifest.json
           test -f styles.css
-          test -f foliate-view.mjs
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
@@ -70,11 +69,9 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
 
           # Catalogue Obsidian : main.js, manifest.json, styles.css
-          # foliate-view.mjs : téléchargement optionnel (lecteur EPUB), à côté de main.js
           gh release create "$tag" \
             --title="$tag" \
             --notes-file="release-notes.md" \
             main.js \
             manifest.json \
-            styles.css \
-            foliate-view.mjs
+            styles.css

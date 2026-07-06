@@ -16,7 +16,6 @@ import { epubAnnotationDraw } from './epubAnnotationDraw';
 import type { PdfHighlightStyle } from '../pdf/pdfHighlightPrefs';
 import { showEpubHighlightContextMenu } from './epubContextMenu';
 import { foliateCfiForAnnotation } from './epubFoliateCfi';
-import { isFoliateViewInstalled } from '../../foliateInstall';
 import { ensureFoliateLoaded } from './foliateLoader';
 import { createEpubHighlightFromSelection } from './epubCreateHighlight';
 import type { EpubPendingSelection } from './epubCreateHighlight';
@@ -381,14 +380,6 @@ export class EpubReaderView extends ItemView {
     this.foliateEl = null;
 
     try {
-      if (!(await isFoliateViewInstalled(this.plugin))) {
-        this.host.empty();
-        this.host.createDiv({
-          cls: 'pane-empty',
-          text: t('EPUB reader requires foliate-view.mjs — download it in plugin settings.'),
-        });
-        return;
-      }
       await ensureFoliateLoaded(this.plugin);
       if (gen !== this.loadGeneration) return;
 

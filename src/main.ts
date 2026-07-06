@@ -1,4 +1,5 @@
 import './polyfills/mapGetOrInsertComputed';
+import './readers/epub/registerFoliateView';
 
 import {
   Events,
