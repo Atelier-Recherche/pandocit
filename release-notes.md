@@ -1,1 +1,1 @@
-40ae5a1 Add function to load ES modules from plugin URLs
+d534509 Refactor EPUB reader integration by removing legacy foliate-view.mjs references. Update related functions and settings to reflect that the EPUB reader is now bundled within main.js. Enhance localization strings for improved user feedback regarding EPUB reader availability.
