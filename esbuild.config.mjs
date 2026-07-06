@@ -3,7 +3,7 @@ import { gzipSync } from 'fflate';
 import { builtinModules } from 'node:module';
 import process from 'process';
 
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } from 'fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 const builtins = [
   ...builtinModules,
@@ -15,7 +15,7 @@ const pdfWorkerBytes = readFileSync(
 );
 /** ~75 % plus petit qu’un embed texte brut → main.js sous la limite Sync 5 Mo. */
 const pdfWorkerGzB64 = Buffer.from(
-  gzipSync(pdfWorkerBytes, { level: 9 })
+  gzipSync(pdfWorkerBytes, { level: 9, mtime: 0 })
 ).toString('base64');
 
 
@@ -46,6 +46,18 @@ function copyFoliateAssets() {
 
   cpSync('src/assets/foliate/epub-bridge.js', 'foliate/epub-bridge.js');
 
+  // Rechargement du plugin : le registre CustomElementRegistry persiste dans Obsidian.
+  const viewPath = 'foliate/view.js';
+  if (existsSync(viewPath)) {
+    const bare = "customElements.define('foliate-view', View)";
+    const guarded =
+      "if (!customElements.get('foliate-view')) customElements.define('foliate-view', View)";
+    let src = readFileSync(viewPath, 'utf8');
+    if (src.includes(bare) && !src.includes(guarded)) {
+      src = src.replace(bare, guarded);
+      writeFileSync(viewPath, src);
+    }
+  }
 }
 
 const banner = `/*
@@ -65,120 +77,83 @@ const prod = process.argv[2] === 'production';
 // foliate/epubcfi.js doit exister avant le bundle (import depuis src/readers/epub).
 copyFoliateAssets();
 
-esbuild
+const buildOptions = {
+  banner: {
+    js: banner,
+  },
+  entryPoints: ['./src/main.ts'],
+  bundle: true,
+  external: [
+    'obsidian',
+    'electron',
+    '@codemirror/autocomplete',
+    '@codemirror/closebrackets',
+    '@codemirror/collab',
+    '@codemirror/commands',
+    '@codemirror/comment',
+    '@codemirror/fold',
+    '@codemirror/gutter',
+    '@codemirror/highlight',
+    '@codemirror/history',
+    '@codemirror/language',
+    '@codemirror/lint',
+    '@codemirror/matchbrackets',
+    '@codemirror/panel',
+    '@codemirror/rangeset',
+    '@codemirror/rectangular-selection',
+    '@codemirror/search',
+    '@codemirror/state',
+    '@codemirror/stream-parser',
+    '@codemirror/text',
+    '@codemirror/tooltip',
+    '@codemirror/view',
+    'node:*',
+    ...builtins,
+  ],
+  format: 'cjs',
+  target: 'es2020',
+  logLevel: 'info',
+  sourcemap: prod ? false : 'inline',
+  treeShaking: true,
+  outfile: 'main.js',
+  minify: prod,
+  legalComments: 'none',
+  charset: 'utf8',
+  define: prod
+    ? {
+        __PDF_WORKER_GZ_B64__: JSON.stringify(pdfWorkerGzB64),
+        __PDF_WORKER_CODE__: '""',
+      }
+    : {
+        __PDF_WORKER_GZ_B64__: '""',
+        __PDF_WORKER_CODE__: JSON.stringify(pdfWorkerBytes.toString('utf8')),
+      },
+};
 
-  .build({
+async function postBuild() {
+  copyFileSync(
+    'node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+    'pdf.worker.min.mjs'
+  );
+  copyPdfAssets();
+}
 
-    banner: {
-
-      js: banner,
-
-    },
-
-    entryPoints: ['./src/main.ts'],
-
-    bundle: true,
-
-    external: [
-
-      'obsidian',
-
-      'electron',
-
-      '@codemirror/autocomplete',
-
-      '@codemirror/closebrackets',
-
-      '@codemirror/collab',
-
-      '@codemirror/commands',
-
-      '@codemirror/comment',
-
-      '@codemirror/fold',
-
-      '@codemirror/gutter',
-
-      '@codemirror/highlight',
-
-      '@codemirror/history',
-
-      '@codemirror/language',
-
-      '@codemirror/lint',
-
-      '@codemirror/matchbrackets',
-
-      '@codemirror/panel',
-
-      '@codemirror/rangeset',
-
-      '@codemirror/rectangular-selection',
-
-      '@codemirror/search',
-
-      '@codemirror/state',
-
-      '@codemirror/stream-parser',
-
-      '@codemirror/text',
-
-      '@codemirror/tooltip',
-
-      '@codemirror/view',
-
-      'node:*',
-
-      ...builtins,
-
-    ],
-
-    format: 'cjs',
-
-    watch: !prod,
-
-    target: 'es2020',
-
-    logLevel: 'info',
-
-    sourcemap: prod ? false : 'inline',
-
-    treeShaking: true,
-
-    outfile: 'main.js',
-
-    minify: prod,
-
-    define: prod
-      ? {
-          __PDF_WORKER_GZ_B64__: JSON.stringify(pdfWorkerGzB64),
-          __PDF_WORKER_CODE__: '""',
-        }
-      : {
-          __PDF_WORKER_GZ_B64__: '""',
-          __PDF_WORKER_CODE__: JSON.stringify(
-            pdfWorkerBytes.toString('utf8')
-          ),
-        },
-
-  })
-
-  .then(() => {
-
-    copyFileSync(
-
-      'node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs',
-
-      'pdf.worker.min.mjs'
-
-    );
-
-    copyPdfAssets();
-
-  })
-
-  .catch((err) => {
+async function run() {
+  try {
+    if (prod) {
+      await esbuild.build(buildOptions);
+      await postBuild();
+    } else {
+      const ctx = await esbuild.context(buildOptions);
+      await ctx.watch();
+      await postBuild();
+      console.log('[PandoCit build] watching…');
+    }
+  } catch (err) {
     console.error('[PandoCit build]', err);
     process.exit(1);
-  });
+  }
+}
+
+void run();
 

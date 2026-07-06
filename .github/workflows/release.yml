@@ -23,7 +23,8 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version-file: '.nvmrc'
+          cache: 'yarn'
 
       - name: Install dependencies
         run: |
@@ -32,7 +33,7 @@ jobs:
           install_ok=0
           for attempt in 1 2 3; do
             echo "=== yarn install (tentative ${attempt}/3) ==="
-            if yarn install --frozen-lockfile --ignore-scripts --network-timeout 300000; then
+            if yarn install --frozen-lockfile --network-timeout 300000; then
               install_ok=1
               break
             fi
@@ -44,6 +45,7 @@ jobs:
             echo "yarn install a échoué après 3 tentatives"
             exit 1
           fi
+          node -e "const v=require('esbuild/package.json').version; if(v!=='0.25.12'){console.error('esbuild inattendu:',v); process.exit(1)}"
 
       - name: Build plugin
         run: |
@@ -52,6 +54,14 @@ jobs:
           test -f main.js
           test -f manifest.json
           test -f styles.css
+          cp main.js main.js.build1
+
+      - name: Verify reproducible build
+        run: |
+          set -euo pipefail
+          yarn build
+          cmp -s main.js main.js.build1
+          echo "Build reproductible (deux passes identiques)."
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
