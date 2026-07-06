@@ -1,1 +1,1 @@
-4a9b022 Refactor code to improve consistency and performance by replacing `activeWindow` with `window` in various files. Update CSS styles for tooltips and modal components to use `setCssStyles` method for better readability. Enhance error handling in bibliography file reading and improve comment stripping in BibTeX processing. Additionally, update the handling of PDF annotations and EPUB rendering for better integration and performance.
+40ae5a1 Add function to load ES modules from plugin URLs
