@@ -6,6 +6,9 @@ import {
   PreopenDirectory,
 } from '@bjorn3/browser_wasi_shim';
 
+import type ReferenceList from './main';
+import { getPandocWasmPath } from './pandocWasmInstall';
+
 type PandocOptions = Record<string, unknown>;
 
 interface ConvertResult {
@@ -42,29 +45,33 @@ function getMemoryDataView() {
   return new DataView(getWasmExports(instance).memory.buffer);
 }
 
-async function instantiateWasm(): Promise<WebAssembly.Instance> {
-  const wasmUrl = 'pandoc.wasm';
-
-  if ('instantiateStreaming' in WebAssembly) {
-    try {
-      const res = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {
-        wasi_snapshot_preview1: wasi!.wasiImport,
-      });
-      return res.instance;
-    } catch {
-      // Fallback below
-    }
+export async function instantiateWasm(
+  plugin: ReferenceList
+): Promise<WebAssembly.Instance> {
+  const wasmPath = getPandocWasmPath(plugin);
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await plugin.app.vault.adapter.readBinary(wasmPath);
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new Error(`Failed to read pandoc.wasm from "${wasmPath}": ${reason}`);
   }
 
-  const response = await fetch(wasmUrl);
-  const bytes = await response.arrayBuffer();
-  const res = await WebAssembly.instantiate(bytes, {
-    wasi_snapshot_preview1: wasi!.wasiImport,
-  });
-  return res.instance;
+  try {
+    const imports = {
+      wasi_snapshot_preview1: wasi?.wasiImport ?? {},
+    };
+    const res = await WebAssembly.instantiate(bytes, imports);
+    return res.instance;
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Failed to instantiate pandoc.wasm from "${wasmPath}": ${reason}`
+    );
+  }
 }
 
-async function initPandoc(): Promise<void> {
+async function initPandoc(plugin: ReferenceList): Promise<void> {
   if (initialized) return;
 
   const args = ['pandoc.wasm', '+RTS', '-H64m', '-RTS'];
@@ -84,10 +91,10 @@ async function initPandoc(): Promise<void> {
   wasi = new WASI(args, env, fds, options);
 
   try {
-    instance = await instantiateWasm();
+    instance = await instantiateWasm(plugin);
   } catch (e) {
     console.error('Failed to load pandoc.wasm', e);
-    throw new Error('pandoc.wasm initialization failed');
+    throw e;
   }
   wasi!.initialize(instance as unknown as WasiInitInstance);
 
@@ -138,9 +145,10 @@ async function addFileToFs(
 async function convertInternal(
   options: PandocOptions,
   stdin: string | null,
-  files: Record<string, Blob>
+  files: Record<string, Blob>,
+  plugin: ReferenceList
 ): Promise<ConvertResult> {
-  await initPandoc();
+  await initPandoc(plugin);
   if (!instance || !fileSystem || !wasi) {
     throw new Error('pandoc.wasm failed to initialize');
   }
@@ -203,7 +211,8 @@ async function convertInternal(
 
 export async function pandocConvertToCslJson(
   fileName: string,
-  contents: string
+  contents: string,
+  plugin: ReferenceList
 ): Promise<string> {
   const files: Record<string, Blob> = {
     [fileName]: new Blob([contents], { type: 'text/plain' }),
@@ -213,10 +222,9 @@ export async function pandocConvertToCslJson(
     'input-files': [fileName],
     'output-file': null,
     to: 'csljson',
-    quiet: true,
   };
 
-  const res = await convertInternal(options, null, files);
+  const res = await convertInternal(options, null, files, plugin);
 
   if (res.stderr) {
     // pandoc writes non-fatal messages to stderr too, so we only throw if stdout is empty

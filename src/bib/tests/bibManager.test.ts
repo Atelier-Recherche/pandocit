@@ -21,13 +21,26 @@ import testYAMLCSL from './test.yaml.json';
 // @ts-ignore
 // import library from './My Library.json';
 import { existsSync, rmSync } from 'fs';
+import type ReferenceList from '../../main';
+
+const mockPlugin = {
+  manifest: { id: 'pandocit' },
+  app: {
+    vault: {
+      adapter: {
+        readBinary: jest.fn(),
+      },
+    },
+  },
+} as unknown as ReferenceList;
 
 describe('bibToCSL()', () => {
   it('returns json from json', async () => {
     expect(
       await bibToCSL(
         path.join(__dirname, 'test.json'),
-        '/opt/homebrew/bin/pandoc'
+        undefined,
+        mockPlugin
       )
     ).toEqual(testCSL);
   });
@@ -36,7 +49,8 @@ describe('bibToCSL()', () => {
     expect(
       await bibToCSL(
         path.join(__dirname, 'test.bib'),
-        '/opt/homebrew/bin/pandoc'
+        undefined,
+        mockPlugin
       )
     ).toEqual(testBIBCSL);
   });
@@ -45,7 +59,8 @@ describe('bibToCSL()', () => {
     expect(
       await bibToCSL(
         path.join(__dirname, 'test2.bib'),
-        '/opt/homebrew/bin/pandoc'
+        undefined,
+        mockPlugin
       )
     ).toEqual(testBIB2CSL);
   });
@@ -54,7 +69,8 @@ describe('bibToCSL()', () => {
     expect(
       await bibToCSL(
         path.join(__dirname, 'test.yaml'),
-        '/opt/homebrew/bin/pandoc'
+        undefined,
+        mockPlugin
       )
     ).toEqual(testYAMLCSL);
   });
