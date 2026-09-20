@@ -1,6 +1,7 @@
 import { CSLList, PartialCSLEntry } from './types';
 import { pandocConvertToCslJson } from '../pandocWasm';
 import { getPath, getFs, getHttps, isDesktop } from '../platformAdapter';
+import type ReferenceList from '../main';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
@@ -73,7 +74,8 @@ export async function readBibliographyFile(
 
 export async function bibToCSL(
   bibPath: string,
-  getVaultRoot?: () => string
+  getVaultRoot: (() => string) | undefined,
+  plugin: ReferenceList
 ): Promise<PartialCSLEntry[]> {
   const path = getPath();
   const resolvedPath = getBibPath(bibPath, getVaultRoot);
@@ -87,7 +89,7 @@ export async function bibToCSL(
   const contents = await readBibliographyFile(resolvedPath, getVaultRoot);
   const virtualName = `input${parsed.ext || '.bib'}`;
 
-  const stdout = await pandocConvertToCslJson(virtualName, contents);
+  const stdout = await pandocConvertToCslJson(virtualName, contents, plugin);
 
   return JSON.parse(stdout);
 }

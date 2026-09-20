@@ -392,7 +392,7 @@ export class BibManager {
 
     if (settings.bibliography) {
       try {
-        const bib = await bibToCSL(settings.bibliography, getVaultRoot);
+        const bib = await bibToCSL(settings.bibliography, getVaultRoot, this.plugin);
 
         if (pluginSettings.pullFromZoteroApi) {
           for (const entry of bib) {
@@ -468,7 +468,7 @@ export class BibManager {
     }
 
     if (!fromCache || this.bibCache.size === 0) {
-      const bib = await bibToCSL(settings.pathToBibliography, getVaultRoot);
+      const bib = await bibToCSL(settings.pathToBibliography, getVaultRoot, this.plugin);
 
       this.bibCache = new Map();
       const bibPath = getBibPath(settings.pathToBibliography, getVaultRoot);
