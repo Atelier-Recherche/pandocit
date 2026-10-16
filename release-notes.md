@@ -1,1 +1,1 @@
-6f017ab Refactor esbuild configuration to improve build process. Introduce a new function to modify the foliate-view registration for better compatibility with Obsidian. Update build options and streamline the post-build process for asset copying.
+8e89473 Update localization strings and enhance PDF annotation handling
