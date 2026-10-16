@@ -4,6 +4,10 @@ export function decodePdfField(v: unknown): string {
   if (v instanceof PDFHexString || v instanceof PDFString) {
     return v.decodeText();
   }
+  if (v instanceof PDFName) {
+    // Subtype etc. are PDFName (/Highlight), not strings.
+    return v.decodeText();
+  }
   if (typeof v === 'string') return v;
   return '';
 }

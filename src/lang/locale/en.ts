@@ -454,6 +454,7 @@ export default {
     'Open a PDF or EPUB with the PandoCit reader to see annotations here.',
   'No annotations for this document yet.':
     'No annotations for this document yet.',
+  'Highlight only': 'Highlight',
   'Import Hypothesis': 'Import Hypothesis',
   'Export to Hypothesis': 'Export to Hypothesis',
   'Hypothesis API token': 'Hypothesis API token',

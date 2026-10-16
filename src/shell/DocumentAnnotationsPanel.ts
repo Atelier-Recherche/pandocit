@@ -198,7 +198,10 @@ export class DocumentAnnotationsPanel {
     const displayComment = (ann.comment || '')
       .replace(/\[\[PWC:[^\]]+\]\]|\[PWC:[^\]]+\]\]?/g, '')
       .trim();
-    const text = displayText || displayComment || ann.id;
+    const highlightFallback = ann.pageLabel
+      ? `${t('Highlight only')} · p.${ann.pageLabel}`
+      : t('Highlight only');
+    const text = displayText || displayComment || highlightFallback;
     row.createDiv({ cls: 'pwc-doc-annotations__text', text });
     if (displayComment && displayComment !== displayText) {
       row.createDiv({

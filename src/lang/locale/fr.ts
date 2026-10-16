@@ -457,6 +457,7 @@ export default {
     'Ouvrez un PDF ou un EPUB avec le lecteur PandoCit pour voir les annotations ici.',
   'No annotations for this document yet.':
     'Aucune annotation pour ce document.',
+  'Highlight only': 'Surlignage',
   'Import Hypothesis': 'Importer Hypothesis',
   'Export to Hypothesis': 'Exporter vers Hypothesis',
   'Hypothesis API token': 'Jeton API Hypothesis',

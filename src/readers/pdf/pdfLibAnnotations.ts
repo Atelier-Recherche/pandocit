@@ -87,6 +87,14 @@ const MARKUP_SUBTYPES = new Set([
   'Stamp',
 ]);
 
+/** Surlignages / soulignements : visibles même sans note ni texte extrait. */
+const VISUAL_MARKUP_SUBTYPES = new Set([
+  'Highlight',
+  'Underline',
+  'StrikeOut',
+  'Squiggly',
+]);
+
 function markupStyleFromPdfSubtype(
   subtype: string
 ): DocumentAnnotation['markupStyle'] {
@@ -146,9 +154,11 @@ export async function loadInPdfAnnotations(
       const contents = legacyContents;
       const { text, comment } = parseTitleAndComment(title, contents);
       const isMarkup = !subtype || MARKUP_SUBTYPES.has(subtype);
+      const isVisualMarkup = VISUAL_MARKUP_SUBTYPES.has(subtype);
 
       if (!isMarkup) continue;
-      if (!markerId && !text && !comment) continue;
+      // Inclure les surlignages « nus » (pas de Contents / pas de note).
+      if (!markerId && !text && !comment && !isVisualMarkup) continue;
 
       const rects = rectsFromAnnot(annot, pageHeight);
       const groupKey = markerId || `other-${pageIndex}-${i}`;

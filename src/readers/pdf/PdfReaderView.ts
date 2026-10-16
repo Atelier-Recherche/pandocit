@@ -4,11 +4,10 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import { readerRegistry } from '../readerRegistry';
-import type { DocumentAnnotation } from '../../annotations/types';
-import { zoteroAnnotationsForAttachment } from './zoteroPdfAnnotations';
 import { configurePdfWorker } from './pdfWorker';
 import { pdfGetDocumentInit } from './pdfAssets';
 import { vaultPathFromViewState } from '../documentRouter';
+import { refreshPdfPanelAnnotations } from './pdfPanelAnnotations';
 
 export const pdfReaderViewType = 'pwc-pdf-reader-view';
 
@@ -268,38 +267,7 @@ export class PdfReaderView extends ItemView {
 
   private async loadAnnotationsForPanel(): Promise<void> {
     if (!this.file) return;
-    const annotations: DocumentAnnotation[] = [];
-    if (this.plugin.settings.pullFromZoteroApi) {
-      const snap = await this.plugin.zoteroSync.loadSnapshot();
-      if (!this.zoteroAttachmentKey) {
-        for (const st of Object.values(snap.items)) {
-          if (String(st.data.itemType) !== 'attachment') continue;
-          const d = st.data as Record<string, unknown>;
-          const p = String(d.path ?? d.url ?? '');
-          if (
-            p &&
-            this.file.path.endsWith(
-              p.replace(/\\/g, '/').split('/').pop() ?? '___'
-            )
-          ) {
-            this.zoteroAttachmentKey = st.key;
-            break;
-          }
-        }
-      }
-      if (this.zoteroAttachmentKey) {
-        annotations.push(
-          ...zoteroAnnotationsForAttachment(snap, this.zoteroAttachmentKey)
-        );
-      }
-    }
-    readerRegistry.set({
-      kind: 'pdf',
-      vaultPath: this.file.path,
-      annotations,
-      zoteroAttachmentKey: this.zoteroAttachmentKey,
-    });
-    this.plugin.emitter.trigger('pwc-document-annotations-changed');
+    await refreshPdfPanelAnnotations(this.plugin, this.file);
   }
 
   private reloadCurrentPdf(): void {
