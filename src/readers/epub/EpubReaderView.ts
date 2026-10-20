@@ -38,16 +38,39 @@ interface EpubReaderState {
 
 type FoliateAnnotation = { value: string; color?: string };
 
+type FoliateTocItem = {
+  id?: string;
+  label?: string;
+  href?: string;
+  subitems?: FoliateTocItem[];
+};
+
+type FoliateLocation = {
+  fraction?: number;
+  section?: { current?: number; total?: number };
+  location?: { current?: number; next?: number; total?: number };
+  tocItem?: FoliateTocItem | null;
+  pageItem?: { label?: string } | null;
+};
+
 type FoliateViewEl = HTMLElement & {
   open?: (book: File | string) => Promise<void>;
   init?: (opts?: { showTextStart?: boolean }) => Promise<void>;
   close?: () => void;
   goLeft?: () => Promise<void>;
   goRight?: () => Promise<void>;
+  goTo?: (target: unknown) => Promise<void>;
+  goToFraction?: (frac: number) => Promise<void>;
   getCFI?: (index: number, range?: Range) => string;
   addAnnotation?: (a: FoliateAnnotation, remove?: boolean) => Promise<unknown>;
   deleteAnnotation?: (a: FoliateAnnotation) => Promise<unknown>;
   showAnnotation?: (a: FoliateAnnotation) => Promise<void>;
+  book?: {
+    toc?: FoliateTocItem[];
+    sections?: unknown[];
+    pageList?: unknown[];
+  };
+  lastLocation?: FoliateLocation | null;
   renderer?: HTMLElement & {
     getContents?: () => Array<{ index: number; doc: Document }>;
     setStyles?: (css: string) => void;
@@ -60,8 +83,18 @@ export class EpubReaderView extends ItemView {
   private file: TFile | null = null;
   private annotations: DocumentAnnotation[] = [];
   private zoteroAttachmentKey: string | undefined;
+  private bodyEl: HTMLElement;
+  private railEl: HTMLElement;
+  private tocPanelEl: HTMLElement;
+  private tocListEl: HTMLElement;
   private host: HTMLElement;
   private toolbar: HTMLElement;
+  private pageInputEl: HTMLInputElement | null = null;
+  private pageTotalEl: HTMLElement | null = null;
+  private tocOpen = false;
+  private currentPage = 1;
+  private totalPages = 1;
+  private currentTocHref: string | undefined;
   private foliateEl: FoliateViewEl | null = null;
   private pendingGotoCfi: string | undefined;
   private pendingSelection: EpubPendingSelection | null = null;
@@ -83,9 +116,23 @@ export class EpubReaderView extends ItemView {
     this.plugin = plugin;
     this.contentEl.addClass('pwc-epub-reader');
     this.toolbar = this.contentEl.createDiv({ cls: 'pwc-epub-reader__toolbar' });
-    this.host = this.contentEl.createDiv({ cls: 'pwc-epub-reader__host' });
+    this.bodyEl = this.contentEl.createDiv({ cls: 'pwc-epub-reader__body' });
+    this.railEl = this.bodyEl.createDiv({ cls: 'pwc-epub-reader__rail' });
+    this.tocPanelEl = this.bodyEl.createDiv({
+      cls: 'pwc-epub-reader__toc-panel',
+    });
+    this.tocPanelEl.createDiv({
+      cls: 'pwc-epub-reader__toc-title',
+      text: t('Table of contents'),
+    });
+    this.tocListEl = this.tocPanelEl.createDiv({
+      cls: 'pwc-epub-reader__toc-list',
+    });
+    this.host = this.bodyEl.createDiv({ cls: 'pwc-epub-reader__host' });
     this.saveDebounced = debounce(() => void this.persistSidecar(), 800, true);
+    this.buildRail();
     this.buildToolbar();
+    this.syncTocPanelVisibility();
     this.syncReaderChrome();
   }
 
@@ -232,8 +279,8 @@ export class EpubReaderView extends ItemView {
 
   reloadAnnotationsFromRegistry(): void {
     if (!this.file || !this.foliateEl) return;
-    const reg = readerRegistry.get();
-    if (reg?.vaultPath !== this.file.path) return;
+    const reg = readerRegistry.get(this.file.path);
+    if (!reg) return;
     this.annotations = [...reg.annotations];
     // Invalider les CFI des annotations disparues ; garder le cache pour le reste.
     const keep = new Set(this.annotations.map((a) => a.id));
@@ -268,8 +315,34 @@ export class EpubReaderView extends ItemView {
     await this.openFile(path, state);
   }
 
+  private buildRail(): void {
+    this.railEl.empty();
+    const tocBtn = this.railEl.createEl('button', {
+      cls: `clickable-icon pwc-epub-reader__toc-toggle${
+        this.tocOpen ? ' is-active' : ''
+      }`,
+      attr: {
+        type: 'button',
+        'aria-label': t('Table of contents'),
+        title: t('Table of contents'),
+      },
+    });
+    setIcon(tocBtn, 'list');
+    tocBtn.addEventListener('click', () => {
+      this.tocOpen = !this.tocOpen;
+      this.syncTocPanelVisibility();
+      this.buildRail();
+    });
+  }
+
+  private syncTocPanelVisibility(): void {
+    this.tocPanelEl.toggleClass('is-open', this.tocOpen);
+  }
+
   private buildToolbar(): void {
     this.toolbar.empty();
+    this.pageInputEl = null;
+    this.pageTotalEl = null;
     const addBtn = (
       icon: string,
       label: string,
@@ -293,6 +366,38 @@ export class EpubReaderView extends ItemView {
     addBtn('chevron-right', t('Next page'), () => {
       void this.foliateEl?.goRight?.();
     });
+
+    const pageWrap = this.toolbar.createDiv({
+      cls: 'pwc-epub-reader__page-numbers',
+    });
+    this.pageInputEl = pageWrap.createEl('input', {
+      cls: 'pwc-epub-reader__page-input',
+      type: 'number',
+      attr: {
+        min: '1',
+        'aria-label': t('Go to page'),
+        title: t('Go to page'),
+      },
+    });
+    this.pageInputEl.value = String(this.currentPage);
+    this.pageInputEl.addEventListener('change', () => {
+      void this.goToPageFromInput();
+    });
+    this.pageInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void this.goToPageFromInput();
+      }
+    });
+    pageWrap.createSpan({ text: ' / ' });
+    this.pageTotalEl = pageWrap.createSpan({
+      cls: 'pwc-epub-reader__page-total',
+      text: String(this.totalPages),
+    });
+
+    addBtn('book-up', t('Reload EPUB'), () => {
+      if (this.file) void this.openFile(this.file.path);
+    });
     addBtn('highlighter', t('Highlight selection in EPUB'), () => {
       void createEpubHighlightFromSelection(this.plugin, this, {
         useSavedPrefs: true,
@@ -306,7 +411,6 @@ export class EpubReaderView extends ItemView {
           this.plugin.settings.annotationRestyleEnabled === false;
         void this.plugin.saveSettings();
         this.buildToolbar();
-        // Forcer un redessin complet (delete + add) pour appliquer le restyle.
         void this.runApplyFoliateAnnotationsSerialized();
       },
       {
@@ -323,7 +427,6 @@ export class EpubReaderView extends ItemView {
         this.syncReaderChrome();
         this.buildToolbar();
         void this.runApplyFoliateAnnotationsSerialized();
-        // Foliate remplace parfois le fond après relocate — réappliquer.
         window.setTimeout(() => this.syncReaderChrome(), 50);
         window.setTimeout(() => this.syncReaderChrome(), 250);
       },
@@ -332,9 +435,118 @@ export class EpubReaderView extends ItemView {
         cls: 'pwc-reader-dark-btn',
       }
     );
-    addBtn('refresh-ccw', t('Reload EPUB'), () => {
-      if (this.file) void this.openFile(this.file.path);
+    addBtn('refresh-cw', t('Resync document annotations'), () => {
+      if (!this.file) return;
+      void import('./epubReaderRefresh').then(({ refreshEpubReaderAnnotations }) =>
+        refreshEpubReaderAnnotations(this.plugin, this.file!.path, {
+          syncRemote: true,
+        })
+      );
     });
+  }
+
+  private async goToPageFromInput(): Promise<void> {
+    const view = this.foliateEl;
+    if (!view || !this.pageInputEl) return;
+    const raw = Number(this.pageInputEl.value);
+    if (!Number.isFinite(raw)) return;
+    const page = Math.min(this.totalPages, Math.max(1, Math.floor(raw)));
+    this.pageInputEl.value = String(page);
+    if (view.goToFraction && this.totalPages > 1) {
+      const frac = (page - 1) / this.totalPages;
+      try {
+        await view.goToFraction(Math.min(0.999999, Math.max(0, frac)));
+      } catch (e) {
+        console.warn('[PandoCit EPUB] goToFraction', e);
+      }
+      return;
+    }
+    if (view.goTo) {
+      try {
+        await view.goTo(page - 1);
+      } catch (e) {
+        console.warn('[PandoCit EPUB] goTo page', e);
+      }
+    }
+  }
+
+  private updatePageUi(loc?: FoliateLocation | null): void {
+    const location = loc ?? this.foliateEl?.lastLocation ?? null;
+    const pageLabel = location?.pageItem?.label?.trim();
+    if (pageLabel && /^\d+$/.test(pageLabel)) {
+      this.currentPage = Math.max(1, parseInt(pageLabel, 10));
+    } else if (location?.location?.current != null) {
+      this.currentPage = Math.max(1, (location.location.current ?? 0) + 1);
+      this.totalPages = Math.max(
+        1,
+        location.location.total ?? this.totalPages
+      );
+    } else if (location?.section?.current != null) {
+      this.currentPage = Math.max(1, (location.section.current ?? 0) + 1);
+      this.totalPages = Math.max(
+        1,
+        location.section.total ?? this.totalPages
+      );
+    }
+    if (location?.location?.total != null) {
+      this.totalPages = Math.max(1, location.location.total);
+    }
+    if (this.pageInputEl && document.activeElement !== this.pageInputEl) {
+      this.pageInputEl.value = String(this.currentPage);
+      this.pageInputEl.max = String(this.totalPages);
+    }
+    if (this.pageTotalEl) this.pageTotalEl.setText(String(this.totalPages));
+
+    const href = location?.tocItem?.href;
+    if (href !== this.currentTocHref) {
+      this.currentTocHref = href;
+      this.highlightActiveTocItem();
+    }
+  }
+
+  private rebuildToc(): void {
+    this.tocListEl.empty();
+    const toc = this.foliateEl?.book?.toc ?? [];
+    if (!toc.length) {
+      this.tocListEl.createDiv({
+        cls: 'pane-empty',
+        text: t('No table of contents'),
+      });
+      return;
+    }
+    const renderItems = (items: FoliateTocItem[], depth: number) => {
+      for (const item of items) {
+        const row = this.tocListEl.createDiv({
+          cls: 'pwc-epub-reader__toc-item',
+          attr: { 'data-depth': String(depth) },
+        });
+        if (item.href) row.dataset.href = item.href;
+        row.style.paddingLeft = `${0.5 + depth * 0.75}rem`;
+        row.createSpan({ text: item.label?.trim() || '—' });
+        if (item.href) {
+          row.addClass('is-clickable');
+          row.addEventListener('click', () => {
+            void this.foliateEl?.goTo?.(item.href);
+          });
+        }
+        if (item.subitems?.length) renderItems(item.subitems, depth + 1);
+      }
+    };
+    renderItems(toc, 0);
+    this.highlightActiveTocItem();
+  }
+
+  private highlightActiveTocItem(): void {
+    const href = this.currentTocHref;
+    this.tocListEl
+      .querySelectorAll('.pwc-epub-reader__toc-item.is-active')
+      .forEach((el) => el.removeClass('is-active'));
+    if (!href) return;
+    const match = Array.from(
+      this.tocListEl.querySelectorAll<HTMLElement>('.pwc-epub-reader__toc-item')
+    ).find((el) => el.dataset.href === href);
+    match?.addClass('is-active');
+    match?.scrollIntoView({ block: 'nearest' });
   }
 
   private syncReaderChrome(): void {
@@ -449,6 +661,10 @@ export class EpubReaderView extends ItemView {
       // Nouvelle couche vide pour une section : reposer les overlays (CFI stables).
       this.scheduleApplyFoliateAnnotations();
     });
+
+    view.addEventListener('relocate', ((e: CustomEvent<FoliateLocation>) => {
+      this.updatePageUi(e.detail ?? view.lastLocation);
+    }) as EventListener);
   }
 
   private scheduleApplyFoliateAnnotations(): void {
@@ -724,15 +940,19 @@ export class EpubReaderView extends ItemView {
       await el.open(fileObj);
       if (gen !== this.loadGeneration) return;
       if (typeof el.init === 'function') await el.init({ showTextStart: true });
+      this.rebuildToc();
+      this.updatePageUi(el.lastLocation);
       this.syncReaderChrome();
       // Foliate finit de monter l’iframe après open/init.
       window.requestAnimationFrame(() => {
         if (gen !== this.loadGeneration) return;
         this.syncReaderChrome();
+        this.updatePageUi(el.lastLocation);
       });
       window.setTimeout(() => {
         if (gen !== this.loadGeneration) return;
         this.syncReaderChrome();
+        this.updatePageUi(el.lastLocation);
       }, 200);
 
       await this.applyAllFoliateAnnotations();
@@ -803,12 +1023,13 @@ export class EpubReaderView extends ItemView {
 
   private syncRegistry(): void {
     if (!this.file) return;
-    readerRegistry.set({
+    readerRegistry.upsert({
       kind: 'epub',
       vaultPath: this.file.path,
       annotations: [...this.annotations],
       zoteroAttachmentKey: this.zoteroAttachmentKey,
     });
+    readerRegistry.setActive(this.file.path);
     this.plugin.emitter.trigger('pwc-document-annotations-changed');
   }
 
@@ -817,7 +1038,7 @@ export class EpubReaderView extends ItemView {
     this.pendingSelection = null;
     this.appliedFoliateCfis.clear();
     this.resolvedFoliateCfiByAnnId.clear();
-    readerRegistry.set(null);
+    if (this.file?.path) readerRegistry.remove(this.file.path);
     this.foliateEl?.close?.();
     this.foliateEl = null;
   }

@@ -10,23 +10,71 @@ export interface ActiveReaderState {
   citekey?: string;
 }
 
-/** Singleton registry for the document currently open in a PandoCit reader */
+/**
+ * Multi-document registry: one entry per open PDF/EPUB path,
+ * plus an "active" path for the panel / toolbar actions.
+ */
 export class ReaderRegistry {
-  private state: ActiveReaderState | null = null;
+  private byPath = new Map<string, ActiveReaderState>();
+  private activePath: string | null = null;
   private listeners = new Set<() => void>();
 
-  get(): ActiveReaderState | null {
-    return this.state;
+  /** Without path: active document. With path: that entry (or null). */
+  get(path?: string): ActiveReaderState | null {
+    if (path != null) return this.byPath.get(path) ?? null;
+    if (!this.activePath) return null;
+    return this.byPath.get(this.activePath) ?? null;
   }
 
-  set(state: ActiveReaderState | null): void {
-    this.state = state;
+  has(path: string): boolean {
+    return this.byPath.has(path);
+  }
+
+  paths(): string[] {
+    return [...this.byPath.keys()];
+  }
+
+  upsert(state: ActiveReaderState): void {
+    this.byPath.set(state.vaultPath, state);
+    if (!this.activePath) this.activePath = state.vaultPath;
     this.notify();
   }
 
-  updateAnnotations(annotations: DocumentAnnotation[]): void {
-    if (!this.state) return;
-    this.state = { ...this.state, annotations };
+  /** Remove one document; if it was active, pick another open path. */
+  remove(vaultPath: string): void {
+    if (!this.byPath.has(vaultPath)) return;
+    this.byPath.delete(vaultPath);
+    if (this.activePath === vaultPath) {
+      const next = this.byPath.keys().next();
+      this.activePath = next.done ? null : next.value;
+    }
+    this.notify();
+  }
+
+  setActive(vaultPath: string | null): void {
+    if (vaultPath === this.activePath) return;
+    if (vaultPath != null && !this.byPath.has(vaultPath)) return;
+    this.activePath = vaultPath;
+    this.notify();
+  }
+
+  updateAnnotations(
+    pathOrAnnotations: string | DocumentAnnotation[],
+    annotations?: DocumentAnnotation[]
+  ): void {
+    let path: string;
+    let anns: DocumentAnnotation[];
+    if (typeof pathOrAnnotations === 'string') {
+      path = pathOrAnnotations;
+      anns = annotations ?? [];
+    } else {
+      if (!this.activePath) return;
+      path = this.activePath;
+      anns = pathOrAnnotations;
+    }
+    const prev = this.byPath.get(path);
+    if (!prev) return;
+    this.byPath.set(path, { ...prev, annotations: anns });
     this.notify();
   }
 

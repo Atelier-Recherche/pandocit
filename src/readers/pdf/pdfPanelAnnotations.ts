@@ -1,7 +1,8 @@
-import { TFile } from 'obsidian';
+import { Notice, TFile } from 'obsidian';
 
 import type ReferenceList from '../../main';
 import type { DocumentAnnotation } from '../../annotations/types';
+import { t } from '../../lang/helpers';
 import { readerRegistry } from '../readerRegistry';
 import { zoteroAnnotationsForAttachment } from './zoteroPdfAnnotations';
 import { loadInPdfAnnotations } from './pdfLibAnnotations';
@@ -37,12 +38,21 @@ export function getCachedPdfPageSizes(
 
 export async function refreshPdfPanelAnnotations(
   plugin: ReferenceList,
-  file: TFile
+  file: TFile,
+  opts?: { syncRemote?: boolean }
 ): Promise<void> {
   const annotations: DocumentAnnotation[] = [];
   let zoteroAttachmentKey: string | undefined;
 
   if (plugin.settings.pullFromZoteroApi) {
+    if (opts?.syncRemote) {
+      const syncRes = await plugin.zoteroSync.sync();
+      if (!syncRes.ok) {
+        new Notice(
+          t('Zotero sync failed') + (syncRes.error ? `: ${syncRes.error}` : '')
+        );
+      }
+    }
     zoteroAttachmentKey = await findZoteroAttachmentKeyForVaultFile(plugin, file, {
       fresh: true,
     });
@@ -103,12 +113,13 @@ export async function refreshPdfPanelAnnotations(
     }
   }
 
-  readerRegistry.set({
+  readerRegistry.upsert({
     kind: 'pdf',
     vaultPath: file.path,
     annotations: sortAnnotationsByDocumentOrder(annotations),
     zoteroAttachmentKey,
     citekey,
   });
+  readerRegistry.setActive(file.path);
   plugin.emitter.trigger('pwc-document-annotations-changed');
 }

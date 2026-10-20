@@ -10,11 +10,70 @@ import {
   clearStrayPdfReaderDarkMode,
 } from '../readerDarkMode';
 import { scheduleZoteroOverlayRender } from './zoteroPdfOverlay';
+import { refreshPdfPanelAnnotations } from './pdfPanelAnnotations';
 
 const TOOLBAR_BTN_CLASS = 'pwc-pdf-highlight-toolbar-btn';
 const TOOLBAR_GROUP_CLASS = 'pwc-pdf-reader-toolbar-group';
 const RESTYLE_BTN_CLASS = 'pwc-reader-restyle-btn';
 const DARK_BTN_CLASS = 'pwc-reader-dark-btn';
+const RESYNC_BTN_CLASS = 'pwc-reader-resync-ann-btn';
+const TOC_BTN_CLASS = 'pwc-reader-toc-btn';
+
+/** Affiche la sidebar PDF Obsidian et active la vue outline (TOC). */
+function showPdfOutlineSidebar(container: HTMLElement): void {
+  const sidebar = container.querySelector('.pdf-sidebar') as HTMLElement | null;
+  const sidebarHidden =
+    !sidebar ||
+    sidebar.classList.contains('is-hidden') ||
+    sidebar.hasAttribute('hidden') ||
+    getComputedStyle(sidebar).display === 'none' ||
+    sidebar.offsetWidth < 8;
+
+  if (sidebarHidden) {
+    const toggleCandidates = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        '.pdf-toolbar .clickable-icon, .pdf-toolbar button'
+      )
+    );
+    const toggle =
+      toggleCandidates.find((el) => {
+        const label = (
+          el.getAttribute('aria-label') ||
+          el.title ||
+          ''
+        ).toLowerCase();
+        return (
+          label.includes('sidebar') ||
+          label.includes('outline') ||
+          label.includes('table of contents') ||
+          label.includes('table des matières')
+        );
+      }) ?? null;
+    toggle?.click();
+  }
+
+  window.setTimeout(() => {
+    const outlineTab = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        '.pdf-sidebar .clickable-icon, .pdf-sidebar button, .pdf-sidebar-tabs .clickable-icon'
+      )
+    ).find((el) => {
+      const label = (
+        el.getAttribute('aria-label') ||
+        el.title ||
+        el.dataset.type ||
+        ''
+      ).toLowerCase();
+      return (
+        label.includes('outline') ||
+        label.includes('table of contents') ||
+        label.includes('table des matières') ||
+        label === 'outline'
+      );
+    });
+    outlineTab?.click();
+  }, 50);
+}
 
 function isObsidianNativePdfActive(plugin: ReferenceList): boolean {
   const leaf = plugin.app.workspace.activeLeaf;
@@ -109,7 +168,11 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
   const darkOn = !!plugin.settings.readerDarkMode;
 
   const existingGroup = pageNumbers.nextElementSibling;
-  if (existingGroup?.classList.contains(TOOLBAR_GROUP_CLASS)) {
+  if (
+    existingGroup?.classList.contains(TOOLBAR_GROUP_CLASS) &&
+    existingGroup.querySelector(`.${RESYNC_BTN_CLASS}`) &&
+    existingGroup.querySelector(`.${TOC_BTN_CLASS}`)
+  ) {
     const hl = existingGroup.querySelector(`.${TOOLBAR_BTN_CLASS}`);
     if (hl) {
       hl.setAttribute('aria-label', title);
@@ -137,6 +200,9 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
   const group = document.createElement('div');
   group.className = TOOLBAR_GROUP_CLASS;
   group.append(
+    makeToolbarBtn('list', t('Table of contents'), TOC_BTN_CLASS, () => {
+      showPdfOutlineSidebar(container);
+    }),
     makeToolbarBtn('highlighter', title, TOOLBAR_BTN_CLASS, () => {
       void createPdfHighlightFromSelection(plugin, { useSavedPrefs: true });
     }),
@@ -164,6 +230,23 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
         scheduleZoteroOverlayRender(plugin);
       },
       darkOn
+    ),
+    makeToolbarBtn(
+      'refresh-cw',
+      t('Resync document annotations'),
+      RESYNC_BTN_CLASS,
+      () => {
+        const leaf = plugin.app.workspace.activeLeaf;
+        const file = (leaf?.view as { file?: TFile } | undefined)?.file;
+        if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'pdf') {
+          return;
+        }
+        void refreshPdfPanelAnnotations(plugin, file, { syncRemote: true }).then(
+          () => {
+            scheduleZoteroOverlayRender(plugin);
+          }
+        );
+      }
     )
   );
 

@@ -1369,10 +1369,102 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
 
 .pwc-epub-reader__toolbar {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.35rem;
   border-bottom: 1px solid var(--background-modifier-border);
   flex-shrink: 0;
+}
+
+.pwc-epub-reader__page-numbers {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0 0.35rem;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.pwc-epub-reader__page-input {
+  width: 3.25rem;
+  text-align: center;
+}
+
+.pwc-epub-reader__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.pwc-epub-reader__rail {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem 0.2rem;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.pwc-epub-reader__toc-panel {
+  display: none;
+  flex-direction: column;
+  width: 14rem;
+  min-width: 12rem;
+  max-width: 40%;
+  flex-shrink: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.pwc-epub-reader__toc-panel.is-open {
+  display: flex;
+}
+
+.pwc-epub-reader__toc-title {
+  padding: 0.45rem 0.6rem;
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.pwc-epub-reader__toc-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.25rem 0;
+}
+
+.pwc-epub-reader__toc-item {
+  padding: 0.3rem 0.6rem;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.pwc-epub-reader__toc-item.is-clickable {
+  cursor: pointer;
+  color: var(--text-normal);
+}
+
+.pwc-epub-reader__toc-item.is-clickable:hover {
+  background: var(--background-modifier-hover);
+}
+
+.pwc-epub-reader__toc-item.is-active {
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+  font-weight: 600;
+}
+
+.pwc-epub-reader--dark .pwc-epub-reader__rail,
+.pwc-epub-reader--dark .pwc-epub-reader__toc-panel {
+  background: #161616;
+  border-color: #2a2a2a;
 }
 
 .pwc-epub-reader__host {

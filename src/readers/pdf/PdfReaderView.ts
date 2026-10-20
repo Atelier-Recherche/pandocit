@@ -112,6 +112,16 @@ export class PdfReaderView extends ItemView {
       },
       !!this.plugin.settings.readerDarkMode
     );
+    addBtn('refresh-cw', t('Resync document annotations'), () => {
+      if (!this.file) return;
+      void refreshPdfPanelAnnotations(this.plugin, this.file, {
+        syncRemote: true,
+      }).then(() => {
+        void import('./zoteroPdfOverlay').then(({ scheduleZoteroOverlayRender }) => {
+          scheduleZoteroOverlayRender(this.plugin);
+        });
+      });
+    });
     addBtn('refresh-ccw', t('Reload PDF'), () => this.reloadCurrentPdf());
     this.toolbar.createSpan({ text: t('Official PDF.js viewer mode') });
     this.syncDarkChrome();
@@ -334,7 +344,7 @@ export class PdfReaderView extends ItemView {
   }
 
   async onClose(): Promise<void> {
-    readerRegistry.set(null);
+    if (this.file?.path) readerRegistry.remove(this.file.path);
     if (this.pdfDoc) {
       await this.pdfDoc.destroy();
       this.pdfDoc = null;

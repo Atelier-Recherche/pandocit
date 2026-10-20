@@ -28,33 +28,36 @@ function clearOverlay(container: HTMLElement): void {
     .forEach((el) => el.remove());
 }
 
-/** Conteneur de la vue PDF native — jamais le shell ni un autre panneau. */
-function findActivePdfContainer(plugin: ReferenceList): HTMLElement | null {
-  const state = readerRegistry.get();
-  const activeFile = plugin.app.workspace.getActiveFile();
-  const preferPath =
-    state?.kind === 'pdf'
-      ? state.vaultPath
-      : activeFile?.extension.toLowerCase() === 'pdf'
-        ? activeFile.path
-        : null;
+interface ActivePdfTarget {
+  container: HTMLElement;
+  vaultPath: string;
+}
 
+/** Conteneur + chemin du PDF natif focusé (jamais le shell ni un autre panneau). */
+function findActivePdfTarget(plugin: ReferenceList): ActivePdfTarget | null {
   const active = plugin.app.workspace.activeLeaf;
   if (active?.view.getViewType() === 'pdf') {
     const vf = (active.view as { file?: TFile }).file;
-    if (!preferPath || vf?.path === preferPath) {
-      return active.view.containerEl;
+    if (vf instanceof TFile && vf.extension.toLowerCase() === 'pdf') {
+      return { container: active.view.containerEl, vaultPath: vf.path };
     }
   }
 
-  let found: HTMLElement | null = null;
+  const activeFile = plugin.app.workspace.getActiveFile();
+  const preferPath =
+    activeFile instanceof TFile && activeFile.extension.toLowerCase() === 'pdf'
+      ? activeFile.path
+      : null;
+
+  let found: ActivePdfTarget | null = null;
   plugin.app.workspace.iterateAllLeaves((leaf) => {
     if (found) return;
     if (leaf.view.getViewType() === pdfReaderViewType) return;
     if (leaf.view.getViewType() !== 'pdf') return;
     const vf = (leaf.view as { file?: TFile }).file;
-    if (preferPath && vf?.path !== preferPath) return;
-    found = leaf.view.containerEl;
+    if (!(vf instanceof TFile) || vf.extension.toLowerCase() !== 'pdf') return;
+    if (preferPath && vf.path !== preferPath) return;
+    found = { container: leaf.view.containerEl, vaultPath: vf.path };
   });
   return found;
 }
@@ -62,17 +65,18 @@ function findActivePdfContainer(plugin: ReferenceList): HTMLElement | null {
 export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
   clearStrayPdfReaderDarkMode();
 
-  const state = readerRegistry.get();
-  const file = plugin.app.workspace.getActiveFile();
-  const container = findActivePdfContainer(plugin);
-  if (!container) return;
+  const target = findActivePdfTarget(plugin);
+  if (!target) return;
 
+  const { container, vaultPath } = target;
   applyPdfNativeDarkMode(container, !!plugin.settings.readerDarkMode);
-
   clearOverlay(container);
 
-  if (!state || !(file instanceof TFile) || state.vaultPath !== file.path) return;
-  const pageSizes = getCachedPdfPageSizes(file.path);
+  // Annotations du PDF affiché (pas seulement l’actif global).
+  const state = readerRegistry.get(vaultPath);
+  if (!state) return;
+
+  const pageSizes = getCachedPdfPageSizes(vaultPath);
   if (!pageSizes?.size) return;
 
   const zoteroAnns = state.annotations.filter(

@@ -120,8 +120,8 @@ export async function findZoteroAttachmentKeyForVaultFile(
   if (!plugin.settings.pullFromZoteroApi) return undefined;
 
   if (!opts?.fresh) {
-    const reg = readerRegistry.get();
-    if (reg?.vaultPath === file.path && reg.zoteroAttachmentKey) {
+    const reg = readerRegistry.get(file.path);
+    if (reg?.zoteroAttachmentKey) {
       return reg.zoteroAttachmentKey;
     }
   }

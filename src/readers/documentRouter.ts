@@ -8,6 +8,7 @@ import { registerPdfNativeViewerUi } from './pdf/pdfNativeViewerUi';
 import { scheduleZoteroOverlayRender } from './pdf/zoteroPdfOverlay';
 import { refreshEpubReaderAnnotations } from './epub/epubReaderRefresh';
 import { registerEpubReaderUi } from './epub/epubReaderUi';
+import { readerRegistry } from './readerRegistry';
 
 export type DocumentKind = 'pdf' | 'epub';
 
@@ -140,12 +141,9 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
 
   plugin.registerEvent(
     plugin.app.workspace.on('active-leaf-change', () => {
+      syncActiveReaderFromWorkspace(plugin);
       scheduleZoteroOverlayRender(plugin);
-    })
-  );
 
-  plugin.registerEvent(
-    plugin.app.workspace.on('active-leaf-change', () => {
       if (plugin.skipFileOpenRoute) return;
       const file = plugin.app.workspace.getActiveFile();
       if (!(file instanceof TFile)) return;
@@ -160,4 +158,23 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
       schedulePandocitReaderSwap(plugin, file);
     })
   );
+}
+
+/** Panneau / actions : actif = doc PDF/EPUB du leaf focusé (si déjà connu). */
+function syncActiveReaderFromWorkspace(plugin: ReferenceList): void {
+  const leaf = plugin.app.workspace.activeLeaf;
+  if (leaf?.view.getViewType() === epubReaderViewType) {
+    const path = vaultPathFromViewState(leaf.getViewState().state);
+    if (path && readerRegistry.has(path)) {
+      readerRegistry.setActive(path);
+      return;
+    }
+  }
+
+  const file = plugin.app.workspace.getActiveFile();
+  if (!(file instanceof TFile)) return;
+  if (!documentKindForFile(file)) return;
+  if (readerRegistry.has(file.path)) {
+    readerRegistry.setActive(file.path);
+  }
 }

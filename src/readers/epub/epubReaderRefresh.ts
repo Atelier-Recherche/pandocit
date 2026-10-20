@@ -1,16 +1,18 @@
-import { TFile } from 'obsidian';
+import { Notice, TFile } from 'obsidian';
 
 import type ReferenceList from '../../main';
+import { t } from '../../lang/helpers';
 import { readerRegistry } from '../readerRegistry';
 import { epubReaderViewType } from './EpubReaderView';
 import { readOrCreateSidecarAnnotations } from './epubSidecar';
 import { findZoteroAttachmentKeyForVaultFile } from '../pdf/zoteroAttachmentMatch';
 import { zoteroAnnotationsForEpubAttachment } from './zoteroEpubAnnotations';
 
-/** Recharge annotations Zotero + sidecar pour le lecteur EPUB actif. */
+/** Recharge annotations Zotero + sidecar. `syncRemote` tire d’abord l’API distante. */
 export async function refreshEpubReaderAnnotations(
   plugin: ReferenceList,
-  vaultPath?: string
+  vaultPath?: string,
+  opts?: { syncRemote?: boolean }
 ): Promise<void> {
   const reg = readerRegistry.get();
   const path = vaultPath ?? reg?.vaultPath;
@@ -19,10 +21,20 @@ export async function refreshEpubReaderAnnotations(
   const file = plugin.app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return;
 
+  if (plugin.settings.pullFromZoteroApi && opts?.syncRemote) {
+    const syncRes = await plugin.zoteroSync.sync();
+    if (!syncRes.ok) {
+      new Notice(
+        t('Zotero sync failed') + (syncRes.error ? `: ${syncRes.error}` : '')
+      );
+    }
+  }
+
   let annotations = await readOrCreateSidecarAnnotations(path);
   const zoteroAttachmentKey = await findZoteroAttachmentKeyForVaultFile(
     plugin,
-    file
+    file,
+    { fresh: true }
   );
 
   if (zoteroAttachmentKey && plugin.settings.pullFromZoteroApi) {
@@ -34,12 +46,13 @@ export async function refreshEpubReaderAnnotations(
     }
   }
 
-  readerRegistry.set({
+  readerRegistry.upsert({
     kind: 'epub',
     vaultPath: path,
     annotations,
     zoteroAttachmentKey,
   });
+  readerRegistry.setActive(path);
   plugin.emitter.trigger('pwc-document-annotations-changed');
 
   const leaf = plugin.app.workspace

@@ -407,6 +407,11 @@ export default {
   'Highlight mode off': 'Mode surlignage désactivé',
   'Save PDF annotations': 'Enregistrer les annotations PDF',
   'Reload PDF': 'Recharger le PDF',
+  'Resync document annotations':
+    'Resynchroniser les annotations (Zotero distant inclus)',
+  'Table of contents': 'Table des matières',
+  'No table of contents': 'Pas de table des matières',
+  'Go to page': 'Aller à la page',
   'PDF not found in vault': 'PDF introuvable dans le coffre',
   'No highlights to save': 'Aucun surlignage à enregistrer',
   'PDF saved with highlights': 'PDF enregistré avec surlignages',

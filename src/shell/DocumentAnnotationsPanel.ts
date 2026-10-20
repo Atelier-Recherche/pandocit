@@ -99,7 +99,7 @@ export class DocumentAnnotationsPanel {
     const imported = await importHypothesisForUri(this.plugin, uri);
     if (!imported.length) return;
     const merged = [...state.annotations, ...imported];
-    readerRegistry.set({ ...state, annotations: merged });
+    readerRegistry.updateAnnotations(state.vaultPath, merged);
     this.render();
     new Notice(`${t('Imported')}: ${imported.length}`);
   }
