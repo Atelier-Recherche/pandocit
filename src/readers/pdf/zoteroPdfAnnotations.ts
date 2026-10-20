@@ -24,6 +24,7 @@ export function zoteroAnnotationsForAttachment(
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType ?? '').toLowerCase() !== 'annotation') continue;
     const d = st.data as Record<string, unknown>;
+    if (d.deleted === 1 || d.deleted === true) continue;
     if (
       !annotationBelongsToAttachment(
         snap,

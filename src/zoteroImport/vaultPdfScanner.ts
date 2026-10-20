@@ -8,13 +8,26 @@ import { countPdfPages } from './pdfPageCount';
 import type { VaultPdfImportRow, VaultPdfImportScanResult } from './types';
 import { findZoteroAttachmentKeyForVaultFile } from '../readers/pdf/zoteroAttachmentMatch';
 
-function collectPdfFiles(folder: TFolder, out: TFile[]): void {
+function normalizeExtList(exts: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const e of exts) {
+    const x = (e.startsWith('.') ? e.slice(1) : e).toLowerCase();
+    if (x) out.add(x);
+  }
+  return out;
+}
+
+function collectImportFiles(
+  folder: TFolder,
+  allowedExt: Set<string>,
+  out: TFile[]
+): void {
   for (const child of folder.children) {
     if (child instanceof TFolder) {
-      collectPdfFiles(child, out);
+      collectImportFiles(child, allowedExt, out);
     } else if (
       child instanceof TFile &&
-      child.extension.toLowerCase() === 'pdf'
+      allowedExt.has(child.extension.toLowerCase())
     ) {
       out.push(child);
     }
@@ -32,8 +45,9 @@ export async function scanVaultFolderForPdfImport(
   }
 
   const rules = getVaultPdfImportSettings(plugin.settings.vaultPdfImport);
+  const allowedExt = normalizeExtList(rules.includeExtensions);
   const raw: TFile[] = [];
-  collectPdfFiles(folder, raw);
+  collectImportFiles(folder, allowedExt, raw);
 
   const candidates: TFile[] = [];
   let excludedCount = 0;
@@ -51,13 +65,14 @@ export async function scanVaultFolderForPdfImport(
 
   for (const file of candidates) {
     onProgress?.(done, total);
+    const kind = file.extension.toLowerCase();
     try {
-      const bytes = await plugin.app.vault.readBinary(file);
-      const pageCount = await countPdfPages(plugin, bytes);
-      const meta = parsePdfMetadataFromPath(
-        file.path,
-        rules.metadataRegex
-      );
+      let pageCount = 0;
+      if (kind === 'pdf') {
+        const bytes = await plugin.app.vault.readBinary(file);
+        pageCount = await countPdfPages(plugin, bytes);
+      }
+      const meta = parsePdfMetadataFromPath(file.path, rules.metadataRegex);
       const existingKey = plugin.settings.pullFromZoteroApi
         ? await findZoteroAttachmentKeyForVaultFile(plugin, file, {
             fresh: true,
@@ -73,6 +88,7 @@ export async function scanVaultFolderForPdfImport(
       rows.push({
         file,
         vaultPath: file.path,
+        kind,
         pageCount,
         title: meta.title,
         author: meta.author,
@@ -84,6 +100,7 @@ export async function scanVaultFolderForPdfImport(
       rows.push({
         file,
         vaultPath: file.path,
+        kind,
         pageCount: 0,
         title: file.basename,
         author: '',

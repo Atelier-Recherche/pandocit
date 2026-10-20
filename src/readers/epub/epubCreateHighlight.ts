@@ -523,6 +523,7 @@ export async function applyEpubHighlight(
       if (zoteroPos) {
         base.zoteroCfi = zoteroPos.zoteroCfi;
         base.zoteroSortIndex = zoteroPos.zoteroSortIndex;
+        base.pageLabel = zoteroPos.pageLabel;
       } else {
         new Notice(t('EPUB Zotero position could not be computed'));
         if (!wantsSidecar) return;

@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { TFile, type PaneType } from 'obsidian';
 
 import type { DocumentAnnotation } from '../../annotations/types';
 import type ReferenceList from '../../main';
@@ -56,7 +56,11 @@ export async function openEpubAtAnnotation(
   plugin: ReferenceList,
   vaultPath: string,
   cfi: string | undefined,
-  ann?: DocumentAnnotation
+  ann?: DocumentAnnotation,
+  opts?: {
+    newLeaf?: boolean | PaneType;
+    zoteroAttachmentKey?: string;
+  }
 ): Promise<void> {
   const reused = await goToEpubAnnotationInOpenReader(
     plugin,
@@ -70,7 +74,13 @@ export async function openEpubAtAnnotation(
   const file = plugin.app.vault.getAbstractFileByPath(rel);
   if (!(file instanceof TFile)) return;
 
+  const newLeaf =
+    opts?.newLeaf ??
+    (plugin.settings.openPdfLinksInNewTab !== false ? 'tab' : false);
+
   await openInPandocitReader(plugin, file, {
     gotoCfi: normalizeGotoCfi(cfi),
+    newLeaf,
+    zoteroAttachmentKey: opts?.zoteroAttachmentKey,
   });
 }

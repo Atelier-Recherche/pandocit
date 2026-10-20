@@ -336,7 +336,7 @@ export default {
   'Comma-separated group IDs to show alongside your library. Load groups to pick names; run Sync for each cache.':
     'Comma-separated group IDs to show alongside your library. Load groups to pick names; run Sync for each cache.',
   'Toggle library subtree':
-    'Show or hide nested items (notes, etc.) under this entry',
+    'Show or hide nested items (notes, annotations, etc.) under this entry',
   'Badge PDF or file': 'PDF / file',
   'Badge note': 'Note',
   'Badge annotation': 'Annotation',
@@ -493,6 +493,10 @@ export default {
   'No vault path for this annotation': 'No vault path for this annotation',
   'Highlight with last settings': 'Highlight with last settings',
   'Highlight with options…': 'Highlight with options…',
+  'Delete annotation': 'Delete annotation',
+  'Delete annotation confirm': 'Delete this annotation?',
+  'Annotation deleted': 'Annotation deleted',
+  'Delete failed': 'Delete failed',
   'Highlight style highlight': 'highlight',
   'Highlight style underline': 'underline',
   'Highlight style strikeout': 'strikeout',
@@ -506,12 +510,13 @@ export default {
     'Style and destination use your last saved settings. Leave the comment empty if you only need a highlight.',
   'Optional comment placeholder': 'Optional comment…',
   'Save highlight': 'Save',
-  'Vault PDF import title': 'Import PDF folder to Zotero',
+  'Vault PDF import title': 'Import PDF/EPUB folder to Zotero',
   'Vault folder': 'Vault folder',
-  'Vault folder import desc': 'All PDFs in this folder (recursive), minus exclusions from settings.',
+  'Vault folder import desc':
+    'All PDF and EPUB files in this folder (recursive), minus exclusions from settings.',
   'Browse folders': 'Browse…',
   'Scan folder': 'Scan folder',
-  'Scanning PDFs': 'Scanning PDFs…',
+  'Scanning PDFs': 'Scanning files…',
   'Select vault folder': 'Select folder',
   'Vault folder required': 'Enter a vault folder path',
   'Folder not found in vault': 'Folder not found in the vault',
@@ -519,10 +524,10 @@ export default {
   'Vault PDF import table hint':
     'Scrollable table — edit title, author, and citation key before import.',
   'Vault PDF import summary':
-    '{found} PDF(s) found, {excluded} excluded by rules, {dup} already in Zotero.',
+    '{found} file(s) found, {excluded} excluded by rules, {dup} already in Zotero.',
   'Short PDF collection hint':
-    'PDFs with ≤ {n} pages go to the short-PDF collection.',
-  'Main collection': 'Main collection (long PDFs)',
+    'PDFs with ≤ {n} pages go to the short-PDF collection. EPUBs always use the main collection.',
+  'Main collection': 'Main collection (long PDFs / EPUB)',
   'Short PDF collection': 'Short PDF collection',
   'Attachment mode': 'Attachment mode',
   'Link to vault file': 'Link to vault file',
@@ -538,25 +543,28 @@ export default {
   'Import selected': 'Import selected',
   Back: 'Back',
   'Importing to Zotero': 'Importing to Zotero…',
-  'No PDFs selected for import': 'No PDFs selected for import',
+  'No PDFs selected for import': 'No files selected for import',
   'Vault PDF import done':
     'Import finished: {created} created, {failed} failed, {skipped} skipped.',
-  'Import vault PDF folder': 'Import PDF folder',
-  'Import vault PDF folder to Zotero': 'Import vault PDF folder to Zotero',
+  'Import vault PDF folder': 'Import PDF/EPUB folder',
+  'Import vault PDF folder to Zotero': 'Import vault PDF/EPUB folder to Zotero',
   'Enable Zotero Web API in settings': 'Enable Zotero Web API in plugin settings',
   'No collection': '(no collection)',
-  'Vault PDF import settings': 'Vault PDF folder import',
+  'Vault PDF import settings': 'Vault PDF/EPUB folder import',
+  'Include file extensions': 'Include file extensions',
+  'Include file extensions desc':
+    'Comma-separated list (default: .pdf, .epub).',
   'Short PDF max pages': 'Short PDF page threshold',
   'Exclude folder globs': 'Excluded folder patterns',
   'Exclude folder globs desc':
     'One pattern per line (e.g. Archives/**, **/drafts).',
   'Metadata regex pattern': 'Filename metadata regex',
   'Metadata regex desc':
-    'Named groups: author, title, citekey. Example: ^(?<author>.+?) - (?<title>.+?)\\.pdf$ — otherwise auto key: author + year + title initials (e.g. dupont2024dln).',
+    'Named groups: author, title, citekey. Example: ^(?<author>.+?) - (?<title>.+?)\\.(?:pdf|epub)$ — otherwise auto key: author + year + title initials (e.g. dupont2024dln).',
   'Default attachment mode': 'Default attachment mode',
   'Default documents folder': 'Default documents folder',
   'Default documents folder desc':
-    'PDFs in this folder and subfolders are offered when you start « Import PDF folder ». Exclusions still apply.',
+    'PDF and EPUB files in this folder and subfolders are offered when you start the import. Exclusions still apply.',
   'Choose folder': '— Choose a folder —',
   'Exclude path regex': 'Exclude paths (regex)',
   'Exclude path regex desc':
@@ -566,7 +574,7 @@ export default {
   'Filter examples settings hint':
     'Use the buttons below to copy examples into the fields above.',
   'Filter examples modal hint':
-    'To change filters: Plugin settings → Zotero Web API → Vault PDF folder import.',
+    'To change filters: Plugin settings → Zotero Web API → Vault PDF/EPUB folder import.',
   'Filter examples globs intro':
     'One pattern per line. ** matches any folder segment; paths use /.',
   'Filter examples path regex intro':
@@ -586,9 +594,18 @@ export default {
   'Filter preview path regex': 'Path regex',
   'Filter preview metadata regex': 'Filename regex',
   'Filter preview no metadata regex': 'No filename regex (title from file name)',
-  'Filter example metadata dash': 'Author — Title.pdf',
-  'Filter example metadata comma': 'Author, Title.pdf',
-  'Filter example metadata year dash': 'YYYY - Author - Title.pdf',
-  'Filter example metadata brackets author': '[Author] Title.pdf',
+  'Filter example metadata dash': 'Author — Title.pdf/.epub',
+  'Filter example metadata comma': 'Author, Title.pdf/.epub',
+  'Filter example metadata year dash': 'YYYY - Author - Title.pdf/.epub',
+  'Filter example metadata brackets author': '[Author] Title.pdf/.epub',
+  'Annotation restyle': 'Annotation restyle',
+  'Restyle color': 'Restyle color',
+  'Restyle style': 'Restyle style',
+  'Restyle style underline': 'Simple line',
+  'Restyle style squiggly': 'Squiggly',
+  'Restyle style dotted': 'Dotted',
+  'Reader dark mode': 'Reader dark mode',
+  'Toggle annotation restyle': 'Toggle annotation restyle',
+  'Toggle reader dark mode': 'Toggle reader dark mode',
 };
 

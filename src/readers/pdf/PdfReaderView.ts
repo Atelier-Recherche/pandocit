@@ -74,13 +74,62 @@ export class PdfReaderView extends ItemView {
   }
 
   private buildToolbar(): void {
-    const b = this.toolbar.createEl('button', {
-      cls: 'clickable-icon',
-      attr: { 'aria-label': t('Reload PDF'), title: t('Reload PDF'), type: 'button' },
-    });
-    setIcon(b, 'refresh-ccw');
-    b.addEventListener('click', () => this.reloadCurrentPdf());
+    this.toolbar.empty();
+    const addBtn = (
+      icon: string,
+      label: string,
+      onClick: () => void,
+      active?: boolean
+    ) => {
+      const b = this.toolbar.createEl('button', {
+        cls: `clickable-icon${active ? ' is-active' : ''}`,
+        attr: { 'aria-label': label, title: label, type: 'button' },
+      });
+      setIcon(b, icon);
+      b.addEventListener('click', onClick);
+    };
+
+    addBtn(
+      'palette',
+      t('Toggle annotation restyle'),
+      () => {
+        this.plugin.settings.annotationRestyleEnabled =
+          this.plugin.settings.annotationRestyleEnabled === false;
+        void this.plugin.saveSettings();
+        this.buildToolbar();
+        this.syncDarkChrome();
+      },
+      this.plugin.settings.annotationRestyleEnabled !== false
+    );
+    addBtn(
+      this.plugin.settings.readerDarkMode ? 'sun' : 'moon',
+      t('Toggle reader dark mode'),
+      () => {
+        this.plugin.settings.readerDarkMode = !this.plugin.settings.readerDarkMode;
+        void this.plugin.saveSettings();
+        this.buildToolbar();
+        this.syncDarkChrome();
+      },
+      !!this.plugin.settings.readerDarkMode
+    );
+    addBtn('refresh-ccw', t('Reload PDF'), () => this.reloadCurrentPdf());
     this.toolbar.createSpan({ text: t('Official PDF.js viewer mode') });
+    this.syncDarkChrome();
+  }
+
+  private syncDarkChrome(): void {
+    void import('../readerDarkMode').then(({ applyPdfNativeDarkMode }) => {
+      applyPdfNativeDarkMode(
+        this.contentEl,
+        !!this.plugin.settings.readerDarkMode
+      );
+      const iframe = this.host.querySelector('iframe');
+      if (iframe) {
+        iframe.style.filter = this.plugin.settings.readerDarkMode
+          ? 'invert(0.9) hue-rotate(180deg)'
+          : '';
+      }
+    });
   }
 
   private resolveVaultPath(state?: PdfReaderState): string | null {

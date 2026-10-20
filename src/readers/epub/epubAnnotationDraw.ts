@@ -1,4 +1,7 @@
-import type { PdfHighlightStyle } from '../pdf/pdfHighlightPrefs';
+import type {
+  AnnotationBlendMode,
+  AnnotationDisplayStyle,
+} from '../annotationDisplayStyle';
 import type { EpubOverlayRect } from './epubHighlightDraw';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -7,11 +10,12 @@ function highlightGroup(
   rects: EpubOverlayRect[],
   color: string,
   opacity: number,
+  blendMode: AnnotationBlendMode = 'multiply',
   padding = 0
 ): SVGGElement {
   const g = document.createElementNS(SVG_NS, 'g');
   g.setAttribute('fill', color);
-  g.setCssStyles({ opacity: String(opacity), mixBlendMode: 'multiply' });
+  g.setCssStyles({ opacity: String(opacity), mixBlendMode: blendMode });
   for (const { left, top, height, width } of rects) {
     const el = document.createElementNS(SVG_NS, 'rect');
     el.setAttribute('x', String(left - padding));
@@ -72,14 +76,39 @@ function squigglyGroup(rects: EpubOverlayRect[], color: string): SVGGElement {
   return g;
 }
 
+function dottedGroup(rects: EpubOverlayRect[], color: string): SVGGElement {
+  const g = document.createElementNS(SVG_NS, 'g');
+  g.setAttribute('fill', color);
+  const r = 1.2;
+  const gap = 5;
+  for (const { left, bottom, width } of rects) {
+    const y = bottom - 1;
+    const n = Math.max(1, Math.floor(width / gap));
+    for (let i = 0; i <= n; i++) {
+      const el = document.createElementNS(SVG_NS, 'circle');
+      el.setAttribute('cx', String(left + i * gap));
+      el.setAttribute('cy', String(y));
+      el.setAttribute('r', String(r));
+      g.appendChild(el);
+    }
+  }
+  return g;
+}
+
 export function epubAnnotationDraw(
   rects: EpubOverlayRect[],
-  options: { color?: string; opacity?: number; style?: PdfHighlightStyle } = {}
+  options: {
+    color?: string;
+    opacity?: number;
+    style?: AnnotationDisplayStyle;
+    blendMode?: AnnotationBlendMode;
+  } = {}
 ): SVGGElement {
   const {
     color = '#ffd400',
     opacity = 0.35,
     style = 'highlight',
+    blendMode = 'multiply',
   } = options;
   switch (style) {
     case 'underline':
@@ -88,7 +117,9 @@ export function epubAnnotationDraw(
       return strikeoutGroup(rects, color);
     case 'squiggly':
       return squigglyGroup(rects, color);
+    case 'dotted':
+      return dottedGroup(rects, color);
     default:
-      return highlightGroup(rects, color, opacity);
+      return highlightGroup(rects, color, opacity, blendMode);
   }
 }

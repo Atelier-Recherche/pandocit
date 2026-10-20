@@ -75,8 +75,42 @@ export function attachmentKeyMatchesParent(
   return attach.plainKey === parent.plainKey;
 }
 
+function normPathKey(p: string): string {
+  return p.replace(/\\/g, '/').normalize('NFC').toLowerCase();
+}
+
+function attachmentBasename(d: Record<string, unknown>): string {
+  const fromFilename =
+    typeof d.filename === 'string' ? d.filename.trim() : '';
+  if (fromFilename) return fromFilename.replace(/\\/g, '/').split('/').pop() ?? '';
+
+  const raw = String(d.path ?? d.url ?? d.title ?? '').trim();
+  if (!raw) return '';
+  return raw.replace(/\\/g, '/').split('/').pop() ?? '';
+}
+
+function attachmentMatchesFileExt(
+  d: Record<string, unknown>,
+  fileExt: string
+): boolean {
+  const ct = String(d.contentType ?? '').toLowerCase();
+  const name = attachmentBasename(d).toLowerCase();
+  if (fileExt === 'epub') {
+    if (ct.includes('epub')) return true;
+    if (name.endsWith('.epub')) return true;
+    return false;
+  }
+  if (fileExt === 'pdf') {
+    if (ct.includes('pdf')) return true;
+    if (name.endsWith('.pdf')) return true;
+    return false;
+  }
+  return true;
+}
+
 /**
- * Trouve la pièce jointe Zotero liée à un PDF du coffre (chemin lié, puis nom de fichier).
+ * Trouve la pièce jointe Zotero liée à un PDF/EPUB du coffre
+ * (chemin lié, puis nom de fichier, en privilégiant le contentType).
  */
 export async function findZoteroAttachmentKeyForVaultFile(
   plugin: ReferenceList,
@@ -93,29 +127,39 @@ export async function findZoteroAttachmentKeyForVaultFile(
   }
 
   const snap = await plugin.zoteroSync.loadSnapshot();
-  const normFile = file.path.replace(/\\/g, '/').toLowerCase();
+  const normFile = normPathKey(file.path);
   const fileName = normFile.split('/').pop() ?? '';
+  const fileExt = file.extension.toLowerCase();
 
   let filenameMatch: string | undefined;
   let bestNameLen = 0;
+  let bestExtMatch = false;
 
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType) !== 'attachment') continue;
     const d = st.data as Record<string, unknown>;
+    const extOk = attachmentMatchesFileExt(d, fileExt);
 
     const linked = getLinkedFilePathFromAttachmentData(d);
     if (linked) {
       const vaultPath = resolveVaultRelativePdfPath(linked);
-      if (vaultPath && vaultPath.replace(/\\/g, '/').toLowerCase() === normFile) {
-        return st.key;
+      if (vaultPath && normPathKey(vaultPath) === normFile) {
+        // Match chemin exact : priorité maximale, surtout si contentType cohérent.
+        if (extOk) return st.key;
+        if (!filenameMatch) filenameMatch = st.key;
+        continue;
       }
     }
 
-    const rawPath = String(d.path ?? d.url ?? '');
-    if (!rawPath || !fileName) continue;
-    const name = rawPath.replace(/\\/g, '/').split('/').pop()?.toLowerCase() ?? '';
-    if (name && normFile.endsWith(name) && name.length >= bestNameLen) {
+    if (!fileName) continue;
+    const name = normPathKey(attachmentBasename(d));
+    if (!name || !normFile.endsWith(name)) continue;
+
+    const betterExt = extOk && !bestExtMatch;
+    const longer = name.length > bestNameLen && extOk === bestExtMatch;
+    if (betterExt || longer || (!filenameMatch && name.length >= bestNameLen)) {
       bestNameLen = name.length;
+      bestExtMatch = extOk;
       filenameMatch = st.key;
     }
   }

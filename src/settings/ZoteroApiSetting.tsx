@@ -474,6 +474,38 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                 </div>
                 <div className="pwc-vault-pdf-import-settings__field">
                   <label className="setting-item-name">
+                    {t('Include file extensions')}
+                  </label>
+                  <p className="setting-item-description">
+                    {t('Include file extensions desc')}
+                  </p>
+                  <input
+                    type="text"
+                    className="pwc-zotero-edit-input"
+                    defaultValue={(
+                      plugin.settings.vaultPdfImport?.includeExtensions ?? [
+                        '.pdf',
+                        '.epub',
+                      ]
+                    ).join(', ')}
+                    onChange={(e) => {
+                      const parts = e.target.value
+                        .split(/[,;\s]+/)
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .map((s) => (s.startsWith('.') ? s : `.${s}`));
+                      plugin.settings.vaultPdfImport = {
+                        ...plugin.settings.vaultPdfImport,
+                        includeExtensions: parts.length
+                          ? parts
+                          : ['.pdf', '.epub'],
+                      };
+                      void plugin.saveSettings();
+                    }}
+                  />
+                </div>
+                <div className="pwc-vault-pdf-import-settings__field">
+                  <label className="setting-item-name">
                     {t('Short PDF max pages')}
                   </label>
                   <input

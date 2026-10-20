@@ -5,6 +5,8 @@ export type VaultPdfImportRowStatus = 'new' | 'duplicate' | 'error';
 export interface VaultPdfImportRow {
   file: TFile;
   vaultPath: string;
+  /** Extension lowercase sans point (`pdf`, `epub`). */
+  kind: 'pdf' | 'epub' | string;
   pageCount: number;
   title: string;
   author: string;

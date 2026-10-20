@@ -14,10 +14,10 @@ export const EXAMPLE_EXCLUDE_PATH_REGEX =
   '.*/(Archives|drafts|brouillons|\\.trash)(/|$)';
 
 export const EXAMPLE_METADATA_REGEX_BASENAME =
-  '^(?<author>.+?) - (?<title>.+?)\\.pdf$';
+  '^(?<author>.+?) - (?<title>.+?)\\.(?:pdf|epub)$';
 
 export const EXAMPLE_METADATA_REGEX_COMMA =
-  '^(?<author>.+?), (?<title>.+?)\\.pdf$';
+  '^(?<author>.+?), (?<title>.+?)\\.(?:pdf|epub)$';
 
 export interface FilterExampleGroup {
   id: string;
@@ -34,7 +34,7 @@ export const METADATA_REGEX_EXAMPLES: FilterExampleGroup[] = [
     introKey: 'Filter example metadata intro',
     sampleNames: [
       'Dupont - Deep Learning Notes.pdf',
-      'Martin - Introduction a Rust.pdf',
+      'Martin - Introduction a Rust.epub',
     ],
     value: EXAMPLE_METADATA_REGEX_BASENAME,
   },
@@ -42,7 +42,10 @@ export const METADATA_REGEX_EXAMPLES: FilterExampleGroup[] = [
     id: 'comma',
     labelKey: 'Filter example metadata comma',
     introKey: 'Filter example metadata intro',
-    sampleNames: ['Dupont, Deep Learning Notes.pdf', 'Martin, Rust Book.pdf'],
+    sampleNames: [
+      'Dupont, Deep Learning Notes.pdf',
+      'Martin, Rust Book.epub',
+    ],
     value: EXAMPLE_METADATA_REGEX_COMMA,
   },
   {
@@ -51,9 +54,10 @@ export const METADATA_REGEX_EXAMPLES: FilterExampleGroup[] = [
     introKey: 'Filter example metadata intro',
     sampleNames: [
       '2024 - Dupont - Machine Learning Guide.pdf',
-      '2019 - Martin - Systèmes distribués.pdf',
+      '2019 - Martin - Systèmes distribués.epub',
     ],
-    value: '^(?:\\d{4})\\s*-\\s*(?<author>.+?)\\s*-\\s*(?<title>.+?)\\.pdf$',
+    value:
+      '^(?:\\d{4})\\s*-\\s*(?<author>.+?)\\s*-\\s*(?<title>.+?)\\.(?:pdf|epub)$',
   },
   {
     id: 'brackets-author',
@@ -61,9 +65,9 @@ export const METADATA_REGEX_EXAMPLES: FilterExampleGroup[] = [
     introKey: 'Filter example metadata intro',
     sampleNames: [
       '[Dupont] Deep Learning Notes.pdf',
-      '[Martin] Rust Essentials.pdf',
+      '[Martin] Rust Essentials.epub',
     ],
-    value: '^\\[(?<author>[^\\]]+)\\]\\s*(?<title>.+?)\\.pdf$',
+    value: '^\\[(?<author>[^\\]]+)\\]\\s*(?<title>.+?)\\.(?:pdf|epub)$',
   },
 ];
 

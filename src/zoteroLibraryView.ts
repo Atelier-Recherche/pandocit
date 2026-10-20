@@ -190,10 +190,16 @@ export class ZoteroLibraryPanel {
         const { noticeSyncResult } = await import('./zoteroApi/zoteroSync');
         const r = await this.plugin.zoteroSync.sync();
         noticeSyncResult(r, t);
+        await this.plugin.zoteroAnnotationIndex.refresh(this.plugin);
         await this.plugin.bibManager.loadGlobalZoteroApi();
         this.plugin.bibManager.fileCache.clear();
         this.plugin.processReferences();
         await this.refreshList();
+        this.plugin.emitter.trigger('pwc-zotero-synced');
+        const { refreshEpubReaderAnnotations } = await import(
+          './readers/epub/epubReaderRefresh'
+        );
+        await refreshEpubReaderAnnotations(this.plugin);
       } finally {
         this.syncBtn.disabled = false;
       }
@@ -963,9 +969,18 @@ export class ZoteroLibraryPanel {
     const page = row.annotationPageLabel
       ? parseInt(row.annotationPageLabel, 10)
       : undefined;
+    const lower = path.toLowerCase();
+    const gotoCfi = lower.endsWith('.epub')
+      ? String(
+          (snap.items[row.key]?.data as Record<string, unknown> | undefined)
+            ?.annotationPosition ?? ''
+        ) || undefined
+      : undefined;
     await openDocumentFromPlugin(this.plugin, path, {
       page: Number.isFinite(page) ? page : undefined,
       zoteroAnnotationKey: row.key,
+      zoteroAttachmentKey: row.parentAttachmentKey,
+      gotoCfi,
     });
   }
 
@@ -1012,7 +1027,12 @@ export class ZoteroLibraryPanel {
     }
 
     let nestEl: HTMLElement | null = null;
-    const hasSubtree = node.children.length > 0;
+    const nestedAnnRows = this.annotationRowsForAttachments(
+      node.inlineAttachments
+    );
+    // Chevron : notes enfants OU annotations sur les PJ (sinon Freud/Orain n'avaient jamais de nest).
+    const hasSubtree =
+      node.children.length > 0 || nestedAnnRows.length > 0;
     let nestPopulated = false;
 
     const wrap = this.listEl.createDiv({
@@ -1039,7 +1059,7 @@ export class ZoteroLibraryPanel {
     this.attachRowActions(actions, node.stored, node.citekey);
 
     // Le sous-arbre (nest) n'est peuplé qu'au premier dépliement (voir renderPdfStripInRow).
-    if (node.children.length) {
+    if (hasSubtree) {
       nestEl = wrap.createDiv({
         cls: 'pwc-zotero-library__tree-nest pwc-zotero-library__tree-nest--collapsed',
       });
@@ -1056,14 +1076,36 @@ export class ZoteroLibraryPanel {
               nestPopulated = true;
               const prev = this.listEl;
               this.listEl = nestEl;
-              this.renderListBatched(node.children, (ch) =>
-                this.renderTreeNode(ch, depth + 1)
-              );
+              if (node.children.length) {
+                this.renderListBatched(node.children, (ch) =>
+                  this.renderTreeNode(ch, depth + 1)
+                );
+              }
+              for (const row of nestedAnnRows) {
+                this.renderAnnotationRow(row);
+              }
               this.listEl = prev;
             },
           }
         : undefined
     );
+  }
+
+  /** Annotations Zotero rattachées aux PJ affichées sur la ligne. */
+  private annotationRowsForAttachments(
+    attachments: StoredZoteroItem[] | undefined
+  ): ZoteroAnnotationRow[] {
+    if (!attachments?.length) return [];
+    const keys = new Set(attachments.map((a) => a.key));
+    const plains = new Set(
+      attachments.map((a) => parseStorageItemKey(a.key).plainKey)
+    );
+    return this.annRows.filter((row) => {
+      if (keys.has(row.parentAttachmentKey)) return true;
+      return plains.has(
+        parseStorageItemKey(row.parentAttachmentKey).plainKey
+      );
+    });
   }
 
   private renderRowFlat(row: RowFlat) {
@@ -1121,13 +1163,15 @@ export class ZoteroLibraryPanel {
   }
 
   /** Comme le tooltip des citekeys : `openLinkText` dans le coffre, sinon `file://`. */
-  private openLocalPath(p: string) {
+  private openLocalPath(p: string, attachmentKey?: string) {
     const abs = this.resolveLinkedLocalPathForOpen(p);
     if (!abs) return;
     const source = this.plugin.app.workspace.getActiveFile()?.path ?? '';
     const lower = abs.toLowerCase();
     if (lower.endsWith('.epub')) {
-      void openDocumentFromPlugin(this.plugin, abs);
+      void openDocumentFromPlugin(this.plugin, abs, {
+        zoteroAttachmentKey: attachmentKey,
+      });
       return;
     }
     void openPdfForPlugin(
@@ -1242,7 +1286,7 @@ export class ZoteroLibraryPanel {
           chip.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.openLocalPath(link.path);
+            this.openLocalPath(link.path, att.key);
           });
         } else {
           const chip = group.createEl('button', {

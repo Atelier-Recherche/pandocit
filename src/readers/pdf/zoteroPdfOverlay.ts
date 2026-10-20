@@ -6,8 +6,18 @@ import {
 } from '../../annotations/annotationReference';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
+import {
+  dottedBackgroundImage,
+  resolveAnnotationDisplayAppearance,
+  squigglyBackgroundImage,
+} from '../annotationDisplayStyle';
+import {
+  applyPdfNativeDarkMode,
+  clearStrayPdfReaderDarkMode,
+} from '../readerDarkMode';
 import { readerRegistry } from '../readerRegistry';
 import { getCachedPdfPageSizes } from './pdfPanelAnnotations';
+import { pdfReaderViewType } from './PdfReaderView';
 
 function clearOverlay(container: HTMLElement): void {
   container
@@ -18,21 +28,46 @@ function clearOverlay(container: HTMLElement): void {
     .forEach((el) => el.remove());
 }
 
+/** Conteneur de la vue PDF native — jamais le shell ni un autre panneau. */
 function findActivePdfContainer(plugin: ReferenceList): HTMLElement | null {
-  const leaf = plugin.app.workspace.activeLeaf;
-  if (!leaf) return null;
-  const file = plugin.app.workspace.getActiveFile();
-  if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'pdf') {
-    return null;
+  const state = readerRegistry.get();
+  const activeFile = plugin.app.workspace.getActiveFile();
+  const preferPath =
+    state?.kind === 'pdf'
+      ? state.vaultPath
+      : activeFile?.extension.toLowerCase() === 'pdf'
+        ? activeFile.path
+        : null;
+
+  const active = plugin.app.workspace.activeLeaf;
+  if (active?.view.getViewType() === 'pdf') {
+    const vf = (active.view as { file?: TFile }).file;
+    if (!preferPath || vf?.path === preferPath) {
+      return active.view.containerEl;
+    }
   }
-  return (leaf.view as any)?.containerEl ?? null;
+
+  let found: HTMLElement | null = null;
+  plugin.app.workspace.iterateAllLeaves((leaf) => {
+    if (found) return;
+    if (leaf.view.getViewType() === pdfReaderViewType) return;
+    if (leaf.view.getViewType() !== 'pdf') return;
+    const vf = (leaf.view as { file?: TFile }).file;
+    if (preferPath && vf?.path !== preferPath) return;
+    found = leaf.view.containerEl;
+  });
+  return found;
 }
 
 export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
+  clearStrayPdfReaderDarkMode();
+
   const state = readerRegistry.get();
   const file = plugin.app.workspace.getActiveFile();
   const container = findActivePdfContainer(plugin);
   if (!container) return;
+
+  applyPdfNativeDarkMode(container, !!plugin.settings.readerDarkMode);
 
   clearOverlay(container);
 
@@ -57,22 +92,58 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
     if (!anns.length) return;
 
     const layer = pageEl.createDiv({ cls: 'pwc-zotero-overlay-layer' });
+    const restyleEnabled = plugin.settings.annotationRestyleEnabled !== false;
+    const readerDarkMode = !!plugin.settings.readerDarkMode;
+    const restyleColor =
+      plugin.settings.annotationRestyleBlackColor?.trim() || '#ffd400';
+    const restyleStyle = plugin.settings.annotationRestyleStyle ?? 'squiggly';
     for (const ann of anns) {
-      const markup = ann.markupStyle ?? 'highlight';
+      const appearance = resolveAnnotationDisplayAppearance({
+        color: ann.color,
+        markupStyle: ann.markupStyle ?? 'highlight',
+        opacity: ann.opacity,
+        restyleEnabled,
+        readerDarkMode,
+        restyleColor,
+        restyleStyle,
+      });
+      const markup = appearance.displayStyle;
       for (const rect of ann.rects ?? []) {
         const el = layer.createDiv({
           cls: `pwc-zotero-overlay-rect pwc-zotero-overlay-rect--${markup}`,
         });
+        if (readerDarkMode) el.addClass('pwc-zotero-overlay-rect--dark');
         el.setCssStyles({
           left: `${(rect.x / pageSize.width) * 100}%`,
           top: `${(rect.y / pageSize.height) * 100}%`,
           width: `${(rect.width / pageSize.width) * 100}%`,
           height: `${(rect.height / pageSize.height) * 100}%`,
           pointerEvents: 'auto',
+          mixBlendMode: appearance.blendMode,
+          opacity: String(
+            markup === 'highlight' ? appearance.opacity : 0.98
+          ),
         });
-        el.style.setProperty('--pwc-ann-color', ann.color || '#ffd400');
+        el.style.setProperty('--pwc-ann-color', appearance.displayColor);
+        el.style.color = appearance.displayColor;
         if (markup === 'highlight') {
-          el.style.background = ann.color || '#ffd400';
+          el.style.background = appearance.displayColor;
+        } else if (markup === 'squiggly') {
+          el.style.backgroundColor = 'transparent';
+          el.style.backgroundImage = squigglyBackgroundImage(
+            appearance.displayColor
+          );
+          el.style.backgroundRepeat = 'repeat-x';
+          el.style.backgroundPosition = 'left bottom';
+          el.style.backgroundSize = '8px 4px';
+        } else if (markup === 'dotted') {
+          el.style.backgroundColor = 'transparent';
+          el.style.backgroundImage = dottedBackgroundImage(
+            appearance.displayColor
+          );
+          el.style.backgroundRepeat = 'repeat-x';
+          el.style.backgroundPosition = 'left bottom';
+          el.style.backgroundSize = '6px 4px';
         }
         el.title = ann.comment || ann.text || 'Zotero annotation';
         el.addEventListener('click', (evt) => {
@@ -128,6 +199,9 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
     document.removeEventListener('click', onDocClick, true);
   };
   document.addEventListener('click', onDocClick, true);
+
+  // Re-appliquer le contre-invert sur les overlays fraîchement créés.
+  applyPdfNativeDarkMode(container, !!plugin.settings.readerDarkMode);
 }
 
 export function scheduleZoteroOverlayRender(plugin: ReferenceList): void {

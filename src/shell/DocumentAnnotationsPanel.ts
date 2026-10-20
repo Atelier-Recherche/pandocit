@@ -252,7 +252,13 @@ export class DocumentAnnotationsPanel {
     });
     const del = actions.createEl('button', { text: t('Delete') });
     del.addEventListener('click', () => {
-      const ok = window.confirm('Supprimer cette annotation ?');
+      const ok = window.confirm(t('Delete annotation confirm'));
+      if (!ok) return;
+      void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
+    });
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const ok = window.confirm(t('Delete annotation confirm'));
       if (!ok) return;
       void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
     });

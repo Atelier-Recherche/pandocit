@@ -136,12 +136,12 @@ export async function resolveVaultPathForZoteroAttachment(
   const d = st.data as Record<string, unknown>;
   const linked = getLinkedFilePathFromAttachmentData(d);
   if (linked) {
-    const vault = await resolveVaultRelativePdfPath(plugin.app, linked);
+    const vault = resolveVaultRelativePdfPath(linked);
     if (vault) return vault;
   }
   const raw = typeof d.path === 'string' ? d.path.trim() : '';
   if (raw && !raw.startsWith('attachments:') && !/^https?:\/\//i.test(raw)) {
-    const vault = await resolveVaultRelativePdfPath(plugin.app, raw);
+    const vault = resolveVaultRelativePdfPath(raw);
     if (vault) return vault;
   }
   const base =
@@ -149,11 +149,13 @@ export async function resolveVaultPathForZoteroAttachment(
     (linked ? linked.split(/[/\\]/).pop() : '') ||
     '';
   if (base) {
+    const baseName = base.toLowerCase();
     const byName = plugin.app.vault.getFiles().find(
       (f) =>
         f instanceof TFile &&
-        f.extension.toLowerCase() === 'pdf' &&
-        f.name.toLowerCase() === base.toLowerCase()
+        (f.extension.toLowerCase() === 'pdf' ||
+          f.extension.toLowerCase() === 'epub') &&
+        f.name.toLowerCase() === baseName
     );
     if (byName instanceof TFile) return byName.path;
   }

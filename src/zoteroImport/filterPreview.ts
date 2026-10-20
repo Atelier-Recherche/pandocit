@@ -10,7 +10,7 @@ export function describeActiveImportFilters(
   lines.push(
     t('Filter preview extensions').replace(
       '{ext}',
-      (rules.includeExtensions ?? ['.pdf']).join(', ')
+      (rules.includeExtensions ?? ['.pdf', '.epub']).join(', ')
     )
   );
   lines.push(

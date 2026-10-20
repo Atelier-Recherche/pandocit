@@ -12,9 +12,15 @@ import {
   lengthenEpubCfi,
   normalizeEpubHighlightColor,
 } from './epubCfiBridge';
+import { resolveAnnotationDisplayAppearance } from '../annotationDisplayStyle';
+import { applyFoliateDarkMode } from '../readerDarkMode';
 import { epubAnnotationDraw } from './epubAnnotationDraw';
 import type { PdfHighlightStyle } from '../pdf/pdfHighlightPrefs';
-import { showEpubHighlightContextMenu } from './epubContextMenu';
+import {
+  dismissEpubContextMenu,
+  getEpubAnnCfiAttr,
+  showEpubHighlightContextMenu,
+} from './epubContextMenu';
 import { foliateCfiForAnnotation } from './epubFoliateCfi';
 import { ensureFoliateLoaded } from './foliateLoader';
 import { createEpubHighlightFromSelection } from './epubCreateHighlight';
@@ -39,10 +45,13 @@ type FoliateViewEl = HTMLElement & {
   goLeft?: () => Promise<void>;
   goRight?: () => Promise<void>;
   getCFI?: (index: number, range?: Range) => string;
-  addAnnotation?: (a: FoliateAnnotation) => Promise<unknown>;
+  addAnnotation?: (a: FoliateAnnotation, remove?: boolean) => Promise<unknown>;
+  deleteAnnotation?: (a: FoliateAnnotation) => Promise<unknown>;
   showAnnotation?: (a: FoliateAnnotation) => Promise<void>;
-  renderer?: {
+  renderer?: HTMLElement & {
     getContents?: () => Array<{ index: number; doc: Document }>;
+    setStyles?: (css: string) => void;
+    shadowRoot?: ShadowRoot | null;
   };
 };
 
@@ -58,8 +67,16 @@ export class EpubReaderView extends ItemView {
   private pendingSelection: EpubPendingSelection | null = null;
   private annotationStyles = new Map<string, PdfHighlightStyle>();
   private annotationOpacity = new Map<string, number>();
+  /** CFI foliate affiché → id d’annotation (clic droit sur surlignage). */
+  private foliateCfiToAnnId = new Map<string, string>();
+  /** Overlays actuellement posés dans foliate (pour retirer les fantômes). */
+  /** CFI effectivement posés dans foliate (clés overlayer). */
+  private appliedFoliateCfis = new Set<string>();
+  /** CFI foliate stable par id d’annotation (évite de recalculer → fantômes). */
+  private resolvedFoliateCfiByAnnId = new Map<string, string>();
   private loadGeneration = 0;
   private saveDebounced: () => void;
+  private applyOverlaysQueued = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: ReferenceList) {
     super(leaf);
@@ -69,6 +86,7 @@ export class EpubReaderView extends ItemView {
     this.host = this.contentEl.createDiv({ cls: 'pwc-epub-reader__host' });
     this.saveDebounced = debounce(() => void this.persistSidecar(), 800, true);
     this.buildToolbar();
+    this.syncReaderChrome();
   }
 
   getViewType(): string {
@@ -93,6 +111,28 @@ export class EpubReaderView extends ItemView {
 
   getFoliateEl(): FoliateViewEl | null {
     return this.foliateEl;
+  }
+
+  getFile(): TFile | null {
+    return this.file;
+  }
+
+  getAnnotations(): DocumentAnnotation[] {
+    return [...this.annotations];
+  }
+
+  findAnnotationByFoliateCfi(cfi: string): DocumentAnnotation | undefined {
+    const id = this.foliateCfiToAnnId.get(cfi);
+    if (id) {
+      const byId = this.annotations.find((a) => a.id === id);
+      if (byId) return byId;
+    }
+    return (
+      this.annotations.find((a) => a.cfi === cfi) ??
+      this.annotations.find(
+        (a) => !!a.cfi && (cfi.includes(a.cfi) || a.cfi.includes(cfi))
+      )
+    );
   }
 
   getZoteroAttachmentKey(): string | undefined {
@@ -134,15 +174,15 @@ export class EpubReaderView extends ItemView {
   async addAnnotationFromPlugin(ann: DocumentAnnotation): Promise<void> {
     const cfi = foliateCfiForAnnotation(this.foliateEl, ann);
     if (!cfi) return;
-    const exists = this.annotations.some(
-      (a) => foliateCfiForAnnotation(this.foliateEl, a) === cfi
-    );
+    const exists = this.annotations.some((a) => a.id === ann.id);
     if (!exists) this.annotations.push(ann);
+    this.resolvedFoliateCfiByAnnId.set(ann.id, cfi);
     try {
       await this.foliateEl?.addAnnotation?.({
         value: cfi,
         color: normalizeEpubHighlightColor(ann.color),
       });
+      this.appliedFoliateCfis.add(cfi);
     } catch (e) {
       console.warn('[PandoCit EPUB] overlay', e);
     }
@@ -152,7 +192,12 @@ export class EpubReaderView extends ItemView {
   async onOpen(): Promise<void> {
     this.registerEvent(
       this.plugin.emitter.on('pwc-zotero-synced', () => {
-        void this.reloadAnnotationsFromRegistry();
+        // Recharger depuis le snapshot Zotero (pas seulement le registry en mémoire).
+        if (this.file) {
+          void import('./epubReaderRefresh').then(({ refreshEpubReaderAnnotations }) =>
+            refreshEpubReaderAnnotations(this.plugin, this.file!.path)
+          );
+        }
       })
     );
     await this.loadFromStateOrActiveFile();
@@ -190,6 +235,11 @@ export class EpubReaderView extends ItemView {
     const reg = readerRegistry.get();
     if (reg?.vaultPath !== this.file.path) return;
     this.annotations = [...reg.annotations];
+    // Invalider les CFI des annotations disparues ; garder le cache pour le reste.
+    const keep = new Set(this.annotations.map((a) => a.id));
+    for (const id of [...this.resolvedFoliateCfiByAnnId.keys()]) {
+      if (!keep.has(id)) this.resolvedFoliateCfiByAnnId.delete(id);
+    }
     void this.applyAllFoliateAnnotations();
   }
 
@@ -219,13 +269,22 @@ export class EpubReaderView extends ItemView {
   }
 
   private buildToolbar(): void {
-    const addBtn = (icon: string, label: string, onClick: () => void) => {
+    this.toolbar.empty();
+    const addBtn = (
+      icon: string,
+      label: string,
+      onClick: () => void,
+      opts?: { active?: boolean; cls?: string }
+    ) => {
       const b = this.toolbar.createEl('button', {
-        cls: 'clickable-icon',
+        cls: `clickable-icon${opts?.cls ? ` ${opts.cls}` : ''}${
+          opts?.active ? ' is-active' : ''
+        }`,
         attr: { 'aria-label': label, title: label, type: 'button' },
       });
       setIcon(b, icon);
       b.addEventListener('click', onClick);
+      return b;
     };
 
     addBtn('chevron-left', t('Previous page'), () => {
@@ -239,9 +298,54 @@ export class EpubReaderView extends ItemView {
         useSavedPrefs: true,
       });
     });
+    addBtn(
+      'palette',
+      t('Toggle annotation restyle'),
+      () => {
+        this.plugin.settings.annotationRestyleEnabled =
+          this.plugin.settings.annotationRestyleEnabled === false;
+        void this.plugin.saveSettings();
+        this.buildToolbar();
+        // Forcer un redessin complet (delete + add) pour appliquer le restyle.
+        void this.runApplyFoliateAnnotationsSerialized();
+      },
+      {
+        active: this.plugin.settings.annotationRestyleEnabled !== false,
+        cls: 'pwc-reader-restyle-btn',
+      }
+    );
+    addBtn(
+      this.plugin.settings.readerDarkMode ? 'sun' : 'moon',
+      t('Toggle reader dark mode'),
+      () => {
+        this.plugin.settings.readerDarkMode = !this.plugin.settings.readerDarkMode;
+        void this.plugin.saveSettings();
+        this.syncReaderChrome();
+        this.buildToolbar();
+        void this.runApplyFoliateAnnotationsSerialized();
+        // Foliate remplace parfois le fond après relocate — réappliquer.
+        window.setTimeout(() => this.syncReaderChrome(), 50);
+        window.setTimeout(() => this.syncReaderChrome(), 250);
+      },
+      {
+        active: !!this.plugin.settings.readerDarkMode,
+        cls: 'pwc-reader-dark-btn',
+      }
+    );
     addBtn('refresh-ccw', t('Reload EPUB'), () => {
       if (this.file) void this.openFile(this.file.path);
     });
+  }
+
+  private syncReaderChrome(): void {
+    const dark = !!this.plugin.settings.readerDarkMode;
+    this.contentEl.toggleClass('pwc-epub-reader--dark', dark);
+    this.applyFoliateThemeStyles();
+  }
+
+  private applyFoliateThemeStyles(): void {
+    const dark = !!this.plugin.settings.readerDarkMode;
+    applyFoliateDarkMode(this.foliateEl, dark);
   }
 
   private foliateAnnotationPayloads(): FoliateAnnotation[] {
@@ -249,13 +353,21 @@ export class EpubReaderView extends ItemView {
     const seen = new Set<string>();
     this.annotationStyles.clear();
     this.annotationOpacity.clear();
+    this.foliateCfiToAnnId.clear();
     for (const a of this.annotations) {
-      const cfi = foliateCfiForAnnotation(this.foliateEl, a);
+      let cfi = this.resolvedFoliateCfiByAnnId.get(a.id);
+      if (!cfi?.startsWith('epubcfi(')) {
+        cfi = foliateCfiForAnnotation(this.foliateEl, a);
+        if (cfi?.startsWith('epubcfi(')) {
+          this.resolvedFoliateCfiByAnnId.set(a.id, cfi);
+        }
+      }
       if (!cfi?.startsWith('epubcfi(') || seen.has(cfi)) continue;
       seen.add(cfi);
       const style = (a.markupStyle ?? 'highlight') as PdfHighlightStyle;
       this.annotationStyles.set(cfi, style);
       this.annotationOpacity.set(cfi, a.opacity ?? 0.35);
+      this.foliateCfiToAnnId.set(cfi, a.id);
       out.push({
         value: cfi,
         color: normalizeEpubHighlightColor(a.color),
@@ -268,7 +380,10 @@ export class EpubReaderView extends ItemView {
     view.addEventListener('draw-annotation', (ev: Event) => {
       const { draw, annotation } = (ev as CustomEvent).detail as {
         draw: (
-          fn: typeof epubAnnotationDraw,
+          fn: (
+            rects: Parameters<typeof epubAnnotationDraw>[0],
+            opts?: Parameters<typeof epubAnnotationDraw>[1]
+          ) => SVGGElement,
           opts?: {
             color?: string;
             opacity?: number;
@@ -278,28 +393,131 @@ export class EpubReaderView extends ItemView {
         annotation: FoliateAnnotation;
       };
       const cfi = annotation.value;
-      draw(epubAnnotationDraw, {
-        color: normalizeEpubHighlightColor(annotation.color),
-        style: this.annotationStyles.get(cfi) ?? 'highlight',
-        opacity: this.annotationOpacity.get(cfi) ?? 0.35,
+      const attr = getEpubAnnCfiAttr();
+      draw((rects, drawOpts) => {
+        try {
+          const storedColor = normalizeEpubHighlightColor(
+            drawOpts?.color ?? annotation.color
+          );
+          // Style stocké : map locale, pas opts Foliate (souvent absents).
+          const storedStyle =
+            this.annotationStyles.get(cfi) ??
+            drawOpts?.style ??
+            'highlight';
+          const storedOpacity =
+            this.annotationOpacity.get(cfi) ??
+            drawOpts?.opacity ??
+            0.35;
+          const appearance = resolveAnnotationDisplayAppearance({
+            color: storedColor,
+            markupStyle: storedStyle,
+            opacity: storedOpacity,
+            restyleEnabled:
+              this.plugin.settings.annotationRestyleEnabled !== false,
+            readerDarkMode: !!this.plugin.settings.readerDarkMode,
+            restyleColor:
+              this.plugin.settings.annotationRestyleBlackColor?.trim() ||
+              '#ffd400',
+            restyleStyle: this.plugin.settings.annotationRestyleStyle,
+          });
+          const g = epubAnnotationDraw(rects, {
+            color: appearance.displayColor,
+            style: appearance.displayStyle,
+            opacity: appearance.opacity,
+            blendMode: appearance.blendMode,
+          });
+          g.setAttribute(attr, cfi);
+          g.style.pointerEvents = 'visiblePainted';
+          g.style.cursor = 'context-menu';
+          return g;
+        } catch (e) {
+          console.warn('[PandoCit EPUB] draw-annotation', e);
+          return epubAnnotationDraw(rects, {
+            color: normalizeEpubHighlightColor(annotation.color),
+          });
+        }
       });
     });
 
-    view.addEventListener('create-overlay', () => {
-      void this.applyAllFoliateAnnotations();
+    view.addEventListener('load', () => {
+      this.applyFoliateThemeStyles();
+      this.scheduleApplyFoliateAnnotations();
     });
+
+    view.addEventListener('create-overlay', () => {
+      this.applyFoliateThemeStyles();
+      // Nouvelle couche vide pour une section : reposer les overlays (CFI stables).
+      this.scheduleApplyFoliateAnnotations();
+    });
+  }
+
+  private scheduleApplyFoliateAnnotations(): void {
+    if (this.applyOverlaysQueued) return;
+    this.applyOverlaysQueued = true;
+    window.requestAnimationFrame(() => {
+      this.applyOverlaysQueued = false;
+      void this.runApplyFoliateAnnotationsSerialized();
+    });
+  }
+
+  private applyOverlaysRunning = false;
+  private applyOverlaysRerun = false;
+
+  private async runApplyFoliateAnnotationsSerialized(): Promise<void> {
+    if (this.applyOverlaysRunning) {
+      this.applyOverlaysRerun = true;
+      return;
+    }
+    this.applyOverlaysRunning = true;
+    try {
+      do {
+        this.applyOverlaysRerun = false;
+        await this.applyAllFoliateAnnotations();
+      } while (this.applyOverlaysRerun);
+    } finally {
+      this.applyOverlaysRunning = false;
+    }
   }
 
   private async applyAllFoliateAnnotations(): Promise<void> {
     const view = this.foliateEl;
     if (!view?.addAnnotation) return;
-    for (const a of this.foliateAnnotationPayloads()) {
+    const payloads = this.foliateAnnotationPayloads();
+    const next = new Set(payloads.map((p) => p.value));
+
+    // Toujours retirer tous les CFI déjà posés (même s’ils restent dans next) :
+    // sinon un CFI recalculé ou un create-overlay laisse des fantômes.
+    const toRemove = [...this.appliedFoliateCfis];
+    for (const old of toRemove) {
       try {
-        await view.addAnnotation(a);
+        if (view.deleteAnnotation) {
+          await view.deleteAnnotation({ value: old });
+        } else {
+          await view.addAnnotation({ value: old }, true);
+        }
       } catch (e) {
-        console.warn('[PandoCit EPUB] addAnnotation', a.value.slice(0, 48), e);
+        console.warn('[PandoCit EPUB] deleteAnnotation', old.slice(0, 48), e);
       }
     }
+    this.appliedFoliateCfis.clear();
+
+    let ok = 0;
+    for (const a of payloads) {
+      try {
+        await view.addAnnotation(a);
+        this.appliedFoliateCfis.add(a.value);
+        ok++;
+      } catch (e) {
+        console.warn('[PandoCit EPUB] addAnnotation', a.value.slice(0, 64), e);
+      }
+    }
+    console.info('[PandoCit EPUB] applied overlays', {
+      total: this.annotations.length,
+      withCfi: payloads.length,
+      drawn: ok,
+      removed: toRemove.length,
+      keptCfiKeys: next.size,
+    });
   }
 
   private captureSelection(doc: Document, index: number): void {
@@ -335,11 +553,21 @@ export class EpubReaderView extends ItemView {
         this.captureSelection(doc, index);
       });
       doc.addEventListener('contextmenu', (e) => {
-        if (!this.pendingSelection) return;
+        this.captureSelection(doc, index);
         e.preventDefault();
         e.stopPropagation();
         showEpubHighlightContextMenu(this.plugin, this, e);
       });
+      // Clic ailleurs dans l’iframe : fermer le menu (Obsidian n’entend pas ces events).
+      doc.addEventListener(
+        'pointerdown',
+        () => {
+          dismissEpubContextMenu();
+        },
+        true
+      );
+      // Raccourcis Obsidian (Ctrl/Cmd+P, etc.) : l’iframe ne les remonte pas toute seule.
+      doc.addEventListener('keydown', (e) => this.forwardHotkeyFromIframe(e), true);
     };
 
     view.addEventListener('load', (ev: Event) => {
@@ -348,13 +576,98 @@ export class EpubReaderView extends ItemView {
         | undefined;
       if (detail?.doc) {
         attach(detail.doc, detail.index ?? 0);
-        void this.applyAllFoliateAnnotations();
+        this.scheduleApplyFoliateAnnotations();
         return;
       }
       const contents = view.renderer?.getContents?.() ?? [];
       for (const c of contents) attach(c.doc, c.index);
-      void this.applyAllFoliateAnnotations();
+      this.scheduleApplyFoliateAnnotations();
     });
+  }
+
+  /**
+   * Les iframes foliate mangent les raccourcis : on résout la commande Obsidian
+   * via HotkeyManager et on l’exécute (les KeyboardEvent synthétiques sont ignorés).
+   */
+  private forwardHotkeyFromIframe(e: KeyboardEvent): void {
+    if (e.defaultPrevented || e.isComposing) return;
+    const t = e.target;
+    if (
+      t instanceof HTMLElement &&
+      (t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.isContentEditable)
+    ) {
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
+
+    const cmdId = this.findCommandIdForKeyboardEvent(e);
+    if (!cmdId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void this.app.commands.executeCommandById(cmdId);
+  }
+
+  private findCommandIdForKeyboardEvent(e: KeyboardEvent): string | null {
+    const keyRaw = e.key;
+    const key =
+      keyRaw.length === 1 ? keyRaw.toLowerCase() : keyRaw;
+    const wantMod = e.ctrlKey || e.metaKey;
+    const wantShift = e.shiftKey;
+    const wantAlt = e.altKey;
+
+    const hm = this.app.hotkeyManager as {
+      getHotkeys?: (
+        id: string
+      ) => Array<{ modifiers: string[]; key: string }> | undefined;
+      getDefaultHotkeys?: (
+        id: string
+      ) => Array<{ modifiers: string[]; key: string }> | undefined;
+    };
+
+    if (!hm?.getHotkeys) {
+      if (wantMod && !wantShift && !wantAlt && key === 'p') {
+        return 'command-palette:open';
+      }
+      return null;
+    }
+
+    const matches = (
+      hk: { modifiers: string[]; key: string } | undefined
+    ): boolean => {
+      if (!hk?.key) return false;
+      const hkKey = hk.key.length === 1 ? hk.key.toLowerCase() : hk.key;
+      if (
+        hkKey !== key &&
+        hk.key !== keyRaw &&
+        hk.key !== e.code &&
+        hk.key.toLowerCase() !== e.code.toLowerCase()
+      ) {
+        return false;
+      }
+      const mods = new Set(
+        (hk.modifiers ?? []).map((m) => String(m).toLowerCase())
+      );
+      const needMod =
+        mods.has('mod') || mods.has('ctrl') || mods.has('meta');
+      const needShift = mods.has('shift');
+      const needAlt = mods.has('alt');
+      return (
+        needMod === wantMod &&
+        needShift === wantShift &&
+        needAlt === wantAlt
+      );
+    };
+
+    for (const id of Object.keys(this.app.commands.commands)) {
+      const list = [
+        ...(hm.getHotkeys(id) ?? []),
+        ...(hm.getDefaultHotkeys?.(id) ?? []),
+      ];
+      if (list.some(matches)) return id;
+    }
+    return null;
   }
 
   private async openFile(
@@ -378,6 +691,8 @@ export class EpubReaderView extends ItemView {
 
     this.foliateEl?.close?.();
     this.foliateEl = null;
+    this.appliedFoliateCfis.clear();
+    this.resolvedFoliateCfiByAnnId.clear();
 
     try {
       await ensureFoliateLoaded(this.plugin);
@@ -409,6 +724,16 @@ export class EpubReaderView extends ItemView {
       await el.open(fileObj);
       if (gen !== this.loadGeneration) return;
       if (typeof el.init === 'function') await el.init({ showTextStart: true });
+      this.syncReaderChrome();
+      // Foliate finit de monter l’iframe après open/init.
+      window.requestAnimationFrame(() => {
+        if (gen !== this.loadGeneration) return;
+        this.syncReaderChrome();
+      });
+      window.setTimeout(() => {
+        if (gen !== this.loadGeneration) return;
+        this.syncReaderChrome();
+      }, 200);
 
       await this.applyAllFoliateAnnotations();
 
@@ -446,13 +771,24 @@ export class EpubReaderView extends ItemView {
         this.file
       );
     }
-    if (!this.zoteroAttachmentKey) return;
+    if (!this.zoteroAttachmentKey) {
+      console.info('[PandoCit EPUB] no Zotero attachment match', {
+        vaultPath: this.file.path,
+      });
+      return;
+    }
 
     const snap = await this.plugin.zoteroSync.loadSnapshot();
     const zot = zoteroAnnotationsForEpubAttachment(
       snap,
       this.zoteroAttachmentKey
     );
+    console.info('[PandoCit EPUB] Zotero annotations', {
+      vaultPath: this.file.path,
+      attachmentKey: this.zoteroAttachmentKey,
+      count: zot.length,
+      libraryVersion: snap.libraryVersion,
+    });
     const ids = new Set(this.annotations.map((a) => a.id));
     for (const a of zot) {
       if (!ids.has(a.id)) this.annotations.push(a);
@@ -479,6 +815,8 @@ export class EpubReaderView extends ItemView {
   async onClose(): Promise<void> {
     this.loadGeneration++;
     this.pendingSelection = null;
+    this.appliedFoliateCfis.clear();
+    this.resolvedFoliateCfiByAnnId.clear();
     readerRegistry.set(null);
     this.foliateEl?.close?.();
     this.foliateEl = null;

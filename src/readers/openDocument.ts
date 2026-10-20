@@ -12,6 +12,8 @@ import { openEpubAtAnnotation } from './epub/navigateEpubAnnotation';
 export interface OpenDocumentOptions {
   page?: number;
   zoteroAnnotationKey?: string;
+  /** Clé PJ Zotero connue (évite le re-match chemin). */
+  zoteroAttachmentKey?: string;
   /** CFI EPUB (foliate) pour aller à une annotation. */
   gotoCfi?: string;
   reuseOpenPdfLeaf?: boolean;
@@ -101,20 +103,31 @@ export async function openDocumentFromPlugin(
     return;
   }
 
-  const rel = raw.replace(/\\/g, '/').replace(/^\/+/, '');
+  // Même résolution que les PDF : chemin Zotero absolu → relatif au coffre.
+  const rel =
+    resolveVaultRelativePdfPath(raw) ??
+    raw.replace(/\\/g, '/').replace(/^\/+/, '');
   const file = plugin.app.vault.getAbstractFileByPath(rel);
   if (!(file instanceof TFile)) {
     new Notice(t('EPUB not found in vault'));
     return;
   }
 
+  const newLeaf =
+    plugin.settings.openPdfLinksInNewTab !== false ? 'tab' : false;
+
   if (opts.gotoCfi?.trim()) {
-    await openEpubAtAnnotation(plugin, rel, opts.gotoCfi);
+    await openEpubAtAnnotation(plugin, file.path, opts.gotoCfi, undefined, {
+      newLeaf,
+      zoteroAttachmentKey: opts.zoteroAttachmentKey,
+    });
     return;
   }
 
   await openInPandocitReader(plugin, file, {
     page: opts.page,
+    newLeaf,
+    zoteroAttachmentKey: opts.zoteroAttachmentKey,
   });
 }
 

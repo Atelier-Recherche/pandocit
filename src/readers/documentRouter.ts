@@ -1,4 +1,4 @@
-import { TFile, type WorkspaceLeaf } from 'obsidian';
+import { TFile, type PaneType, type WorkspaceLeaf } from 'obsidian';
 
 import type ReferenceList from '../main';
 import { pdfReaderViewType } from './pdf/PdfReaderView';
@@ -37,17 +37,38 @@ export function shouldUsePandocitReader(
 
 /**
  * Remplace le lecteur natif (PDF) ou assure la vue PandoCit après ouverture du fichier.
+ * @param opts.newLeaf Comme les PDF : `'tab'` / `true` = nouvel onglet ; `false` = leaf actif.
  */
 export async function openInPandocitReader(
   plugin: ReferenceList,
   file: TFile,
-  opts?: { page?: number; gotoCfi?: string; leaf?: WorkspaceLeaf | null }
+  opts?: {
+    page?: number;
+    gotoCfi?: string;
+    leaf?: WorkspaceLeaf | null;
+    newLeaf?: boolean | PaneType;
+    zoteroAttachmentKey?: string;
+  }
 ): Promise<void> {
   const kind = documentKindForFile(file);
   if (!kind) return;
 
   const viewType = kind === 'pdf' ? pdfReaderViewType : epubReaderViewType;
-  let leaf = opts?.leaf ?? plugin.app.workspace.activeLeaf;
+  let leaf = opts?.leaf ?? null;
+  if (!leaf) {
+    const wantNew =
+      opts?.newLeaf === true ||
+      opts?.newLeaf === 'tab' ||
+      opts?.newLeaf === 'split' ||
+      opts?.newLeaf === 'window';
+    if (wantNew) {
+      leaf = plugin.app.workspace.getLeaf(
+        opts?.newLeaf === true ? 'tab' : opts.newLeaf
+      );
+    } else {
+      leaf = plugin.app.workspace.activeLeaf;
+    }
+  }
   if (!leaf) {
     leaf = plugin.app.workspace.getLeaf('tab');
   }
@@ -61,6 +82,7 @@ export async function openInPandocitReader(
         file: file.path,
         page: opts?.page,
         gotoCfi: opts?.gotoCfi,
+        zoteroAttachmentKey: opts?.zoteroAttachmentKey,
       },
     });
     plugin.app.workspace.revealLeaf(leaf);

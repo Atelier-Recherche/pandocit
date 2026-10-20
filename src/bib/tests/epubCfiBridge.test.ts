@@ -23,27 +23,51 @@ describe('epubCfiBridge', () => {
     expect(cfiFromZoteroAnnotationPosition(raw)).toBe(SAMPLE_CFI);
   });
 
-  it('serializes shortened CFI for Zotero', () => {
-    const pos = zoteroPositionFromEpubCfi(SAMPLE_CFI);
+  it('serializes CFI for Zotero with epubcfi() wrapper, no ID assertions', () => {
+    const pos = zoteroPositionFromEpubCfi(
+      'epubcfi(/6/8[couv]!/4/2/4/2,/1:0,/1:53)'
+    );
     const parsed = JSON.parse(pos) as { value: string };
-    expect(parsed.value).toBe('/6/4!/4/2,/1:1,/1:5');
-    expect(cfiFromZoteroAnnotationPosition(pos)).toBe(SAMPLE_CFI);
+    expect(parsed.value).toBe('epubcfi(/6/8!/4/2/4/2,/1:0,/1:53)');
+    expect(cfiFromZoteroAnnotationPosition(pos)).toBe(
+      'epubcfi(/6/8!/4/2/4/2,/1:0,/1:53)'
+    );
   });
 
   it('extracts epub.js cfi base from foliate CFI', () => {
     expect(epubjsCfiBaseFromFoliateCfi(SAMPLE_CFI)).toBe('/6/4');
   });
 
-  it('builds Zotero EPUB sortIndex (5|8 digits)', () => {
+  it('builds Zotero EPUB sortIndex from section index (not /6/N)', () => {
+    // /6/4 → sectionIndex 1
     const idx = zoteroSortIndexFromEpubCfi(SAMPLE_CFI);
     expect(idx).toMatch(/^\d{5}\|\d{8}$/);
-    expect(idx).toBe('00004|00000001');
+    expect(idx).toBe('00001|00000001');
   });
 
   it('sortIndex from long range CFI', () => {
+    // /6/14 → sectionIndex 6
     const idx = zoteroSortIndexFromEpubCfi(
       'epubcfi(/6/14!/4/2/2/6/4,/5:104,/5:239)'
     );
-    expect(idx).toBe('00014|00000104');
+    expect(idx).toBe('00006|00000104');
+  });
+
+  it('sortIndex ignores CFI ID assertions', () => {
+    // /6/6[couv] → sectionIndex 2 (comme les annotations Zotero mobile page 3)
+    expect(
+      zoteroSortIndexFromEpubCfi('epubcfi(/6/6[couv]!/4/2/4,/1:0,/1:18)')
+    ).toBe('00002|00000000');
+  });
+
+  it('strips CFI ID assertions from Zotero FragmentSelector', () => {
+    const raw = JSON.stringify({
+      type: 'FragmentSelector',
+      conformsTo: 'http://www.idpf.org/epub/linking/cfi/epub-cfi.html',
+      value: '/6/8[couv]!/4/2/2/6,/1:15,/1:36',
+    });
+    expect(cfiFromZoteroAnnotationPosition(raw)).toBe(
+      'epubcfi(/6/8!/4/2/2/6,/1:15,/1:36)'
+    );
   });
 });

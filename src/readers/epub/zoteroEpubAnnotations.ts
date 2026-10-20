@@ -25,6 +25,7 @@ export function zoteroAnnotationsForEpubAttachment(
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType ?? '').toLowerCase() !== 'annotation') continue;
     const d = st.data as Record<string, unknown>;
+    if (d.deleted === 1 || d.deleted === true) continue;
     if (
       !annotationBelongsToAttachment(
         snap,
@@ -87,12 +88,16 @@ export async function pushEpubAnnotationToZotero(
   const sortIndex =
     ann.zoteroSortIndex?.trim() ||
     zoteroSortIndexFromEpubCfi(lengthenEpubCfi(zoteroCfiValue));
+  const pageLabel =
+    ann.pageLabel?.trim() ||
+    (ann.sectionIndex != null ? String(ann.sectionIndex + 1) : '');
 
   const res = await plugin.zoteroSync.createAnnotation(attachmentKey, {
     annotationType: zoteroAnnotationTypeFromStyle(ann.markupStyle ?? 'highlight'),
     annotationText: ann.text,
     annotationComment: ann.comment,
     annotationColor: colorToZoteroHex(ann.color ?? '#ffd400'),
+    annotationPageLabel: pageLabel,
     annotationSortIndex: sortIndex,
     annotationPosition: position,
   });

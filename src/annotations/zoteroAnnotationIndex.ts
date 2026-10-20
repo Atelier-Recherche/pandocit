@@ -53,6 +53,8 @@ export function buildAnnotationRowsFromSnapshot(
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType) !== 'annotation') continue;
     const d = st.data as Record<string, unknown>;
+    // Corbeille Zotero : encore dans le cache tant que non purgé, mais à ignorer.
+    if (d.deleted === 1 || d.deleted === true) continue;
     const parentKey = String(d.parentItem ?? '');
     const parent = parentKey ? snap.items[parentKey] : undefined;
     const parentTitle = parent ? rowTitle(parent) : parentKey;

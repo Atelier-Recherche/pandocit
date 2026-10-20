@@ -1115,10 +1115,48 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
 }
 
 /* —— PDF reader —— */
+.pwc-pdf-reader-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: 0.25rem;
+}
+
+.pwc-reader-restyle-btn.is-active,
+.pwc-reader-dark-btn.is-active,
+.pwc-epub-reader__toolbar .clickable-icon.is-active,
+.pwc-pdf-reader__toolbar .clickable-icon.is-active {
+  color: var(--text-accent);
+  background-color: var(--background-modifier-hover);
+}
+
+.pwc-pdf-reader--dark,
+.pwc-pdf-reader--dark .pdf-container,
+.pwc-pdf-reader--dark .pdf-viewer-container,
+.pwc-pdf-reader--dark .pdf-scroll-container,
+.pwc-pdf-reader--dark .view-content,
+.pwc-pdf-reader--dark .pdfViewer,
+.pwc-pdf-reader--dark .pdf-viewer {
+  --pdf-background: #1a1a1a !important;
+  --pdf-page-background: #1a1a1a !important;
+  --pdf-sidebar-background: #1a1a1a !important;
+  background: #1a1a1a !important;
+  background-color: #1a1a1a !important;
+}
+
+/* Invert canvas seulement (JS pose aussi le filter). */
+.pwc-pdf-reader--dark .page .canvasWrapper {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
 .pwc-pdf-reader {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.pwc-pdf-reader--dark {
+  background: #1a1a1a;
 }
 
 .pwc-pdf-reader__toolbar {
@@ -1160,6 +1198,10 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   cursor: pointer;
 }
 
+.pwc-zotero-overlay-rect--dark.pwc-zotero-overlay-rect--highlight {
+  mix-blend-mode: screen;
+}
+
 .pwc-zotero-overlay-rect--underline {
   opacity: 0.95;
   mix-blend-mode: normal;
@@ -1168,16 +1210,23 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   box-shadow: inset 0 -2px 0 0 var(--pwc-ann-color, #ffd400);
 }
 
-.pwc-zotero-overlay-rect--squiggly {
-  opacity: 0.95;
-  mix-blend-mode: normal;
-  background: transparent !important;
-  box-shadow: none;
+.pwc-zotero-overlay-rect--squiggly,
+.pwc-zotero-overlay-rect--dotted {
+  opacity: 0.98 !important;
+  mix-blend-mode: normal !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
   border-radius: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='4' viewBox='0 0 8 4'%3E%3Cpath d='M0 3 Q2 0 4 3 T8 3' fill='none' stroke='%23cc9900' stroke-width='1.2'/%3E%3C/svg%3E") !important;
-  background-repeat: repeat-x;
-  background-position: left bottom;
-  background-size: 8px 4px;
+  background-repeat: repeat-x !important;
+  background-position: left bottom !important;
+}
+
+.pwc-zotero-overlay-rect--squiggly {
+  background-size: 8px 4px !important;
+}
+
+.pwc-zotero-overlay-rect--dotted {
+  background-size: 6px 4px !important;
 }
 
 .pwc-zotero-overlay-rect--strikeout {
@@ -1297,6 +1346,25 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.pwc-epub-reader--dark {
+  background: #1a1a1a;
+}
+
+.pwc-epub-reader--dark .pwc-epub-reader__host {
+  background: #1e1e1e;
+}
+
+.pwc-epub-reader--dark,
+.pwc-epub-reader--dark .pwc-epub-reader__host,
+.pwc-epub-reader--dark .pwc-epub-reader__view {
+  background: #1a1a1a !important;
+}
+
+/* Foliate : invert livre si exportparts=filter est posé (shadow closed). */
+.pwc-epub-reader--dark foliate-view::part(filter) {
+  filter: invert(0.9) hue-rotate(180deg);
 }
 
 .pwc-epub-reader__toolbar {

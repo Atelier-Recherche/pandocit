@@ -55,8 +55,33 @@ function copyFoliateAssets() {
     let src = readFileSync(viewPath, 'utf8');
     if (src.includes(bare) && !src.includes(guarded)) {
       src = src.replace(bare, guarded);
-      writeFileSync(viewPath, src);
     }
+    // Shadow open : permet mode sombre (accès iframe / part=filter).
+    src = src.replace(
+      "attachShadow({ mode: 'closed' })",
+      "attachShadow({ mode: 'open' })"
+    );
+    // Réexporter part=filter vers le light DOM pour CSS ::part(filter).
+    if (
+      src.includes("this.renderer.setAttribute('exportparts'") &&
+      !src.includes("this.setAttribute('exportparts'")
+    ) {
+      src = src.replace(
+        "this.renderer.setAttribute('exportparts', 'head,foot,filter,container')",
+        "this.renderer.setAttribute('exportparts', 'head,foot,filter,container')\n        this.setAttribute('exportparts', 'filter')"
+      );
+    }
+    writeFileSync(viewPath, src);
+  }
+
+  for (const rel of ['foliate/paginator.js', 'foliate/fixed-layout.js']) {
+    if (!existsSync(rel)) continue;
+    let src = readFileSync(rel, 'utf8');
+    const next = src.replace(
+      "attachShadow({ mode: 'closed' })",
+      "attachShadow({ mode: 'open' })"
+    );
+    if (next !== src) writeFileSync(rel, next);
   }
 }
 

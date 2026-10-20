@@ -8,7 +8,7 @@ export interface ParsedPdfMetadata {
 
 function defaultTitleFromPath(vaultPath: string): string {
   const base = vaultPath.split(/[/\\]/).pop() ?? vaultPath;
-  return base.replace(/\.pdf$/i, '').trim() || base;
+  return base.replace(/\.(pdf|epub)$/i, '').trim() || base;
 }
 
 export function parsePdfMetadataFromPath(

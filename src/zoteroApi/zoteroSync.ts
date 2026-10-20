@@ -26,6 +26,13 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+function contentTypeForAttachmentPath(pathOrName: string): string {
+  const lower = pathOrName.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.epub')) return 'application/epub+zip';
+  return 'application/octet-stream';
+}
+
 function mergeVersionMaps(
   a: Record<string, number> | null | undefined,
   b: Record<string, number> | null | undefined
@@ -539,10 +546,7 @@ export class ZoteroSyncService {
         return { ok: false, error: 'path_required' };
       }
       newData.path = p;
-      const lower = p.toLowerCase();
-      newData.contentType = lower.endsWith('.pdf')
-        ? 'application/pdf'
-        : 'application/octet-stream';
+      newData.contentType = contentTypeForAttachmentPath(p);
     }
 
     const body = JSON.stringify([newData]);
@@ -853,7 +857,7 @@ export class ZoteroSyncService {
       parentItem: route.plainKey,
       title: spec.title.trim() || filename,
       filename,
-      contentType: 'application/pdf',
+      contentType: contentTypeForAttachmentPath(filename),
     };
 
     const posted = await this.postItemsWithRetry(route, [attachmentData]);
@@ -1593,11 +1597,18 @@ function applyRemoteEnvelope(
     existing.conflict = true;
     return;
   }
+  const data = env.data ?? {};
+  // Corbeille Zotero : retirer du cache local (sinon l’annotation reste visible).
+  if (data.deleted === 1 || data.deleted === true) {
+    delete snap.items[env.key];
+    snap.retryFetchKeys = snap.retryFetchKeys.filter((k) => k !== env.key);
+    return;
+  }
   const rec: StoredZoteroItem = {
     key: env.key,
     version: env.version,
     synced: true,
-    data: env.data ?? {},
+    data,
     conflict: false,
   };
   snap.items[env.key] = rec;

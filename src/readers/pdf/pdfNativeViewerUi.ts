@@ -3,27 +3,30 @@ import { Menu, Notice, TFile, debounce, setIcon } from 'obsidian';
 import { copyTextToClipboard } from '../../annotations/annotationReference';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
-import { pdfReaderViewType } from './PdfReaderView';
 import { createPdfHighlightFromSelection } from './pdfCreateHighlight';
 import { getPdfHighlightPrefs } from './pdfHighlightPrefs';
+import {
+  applyPdfNativeDarkMode,
+  clearStrayPdfReaderDarkMode,
+} from '../readerDarkMode';
+import { scheduleZoteroOverlayRender } from './zoteroPdfOverlay';
 
 const TOOLBAR_BTN_CLASS = 'pwc-pdf-highlight-toolbar-btn';
+const TOOLBAR_GROUP_CLASS = 'pwc-pdf-reader-toolbar-group';
+const RESTYLE_BTN_CLASS = 'pwc-reader-restyle-btn';
+const DARK_BTN_CLASS = 'pwc-reader-dark-btn';
 
 function isObsidianNativePdfActive(plugin: ReferenceList): boolean {
-  const file = plugin.app.workspace.getActiveFile();
-  if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'pdf') {
-    return false;
-  }
   const leaf = plugin.app.workspace.activeLeaf;
-  if (!leaf || leaf.view.getViewType() === pdfReaderViewType) return false;
-  const container = leaf.view?.containerEl;
-  return !!container?.querySelector('.pdf-page-numbers, [data-page-number]');
+  if (!leaf || leaf.view.getViewType() !== 'pdf') return false;
+  const file = (leaf.view as { file?: TFile }).file;
+  return file instanceof TFile && file.extension.toLowerCase() === 'pdf';
 }
 
 function activePdfContainer(plugin: ReferenceList): HTMLElement | null {
   const leaf = plugin.app.workspace.activeLeaf;
-  if (!leaf) return null;
-  return leaf.view?.containerEl ?? null;
+  if (!leaf || leaf.view.getViewType() !== 'pdf') return null;
+  return leaf.view.containerEl ?? null;
 }
 
 function highlightToolbarTitle(plugin: ReferenceList): string {
@@ -56,31 +59,19 @@ async function copyPdfSelection(): Promise<void> {
   if (!ok) new Notice(t('Copy failed'));
 }
 
-function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
-  if (!isObsidianNativePdfActive(plugin)) return;
-
-  const container = activePdfContainer(plugin);
-  if (!container) return;
-
-  const pageNumbers = container.querySelector('.pdf-page-numbers');
-  if (!pageNumbers?.parentElement) return;
-
-  const title = highlightToolbarTitle(plugin);
-  const existing = pageNumbers.nextElementSibling;
-  if (existing?.classList.contains(TOOLBAR_BTN_CLASS)) {
-    existing.setAttribute('aria-label', title);
-    (existing as HTMLButtonElement).title = title;
-    return;
-  }
-
-  container.querySelectorAll(`.${TOOLBAR_BTN_CLASS}`).forEach((el) => el.remove());
-
+function makeToolbarBtn(
+  icon: string,
+  label: string,
+  className: string,
+  onClick: () => void,
+  active?: boolean
+): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = `clickable-icon ${TOOLBAR_BTN_CLASS}`;
-  btn.setAttribute('aria-label', title);
-  btn.title = title;
-  setIcon(btn, 'highlighter');
+  btn.className = `clickable-icon ${className}${active ? ' is-active' : ''}`;
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  setIcon(btn, icon);
   btn.addEventListener(
     'pointerdown',
     (e) => {
@@ -92,9 +83,91 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    void createPdfHighlightFromSelection(plugin, { useSavedPrefs: true });
+    onClick();
   });
-  pageNumbers.insertAdjacentElement('afterend', btn);
+  return btn;
+}
+
+function syncPdfReaderChrome(plugin: ReferenceList, container: HTMLElement): void {
+  applyPdfNativeDarkMode(container, !!plugin.settings.readerDarkMode);
+}
+
+function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
+  clearStrayPdfReaderDarkMode();
+  if (!isObsidianNativePdfActive(plugin)) return;
+
+  const container = activePdfContainer(plugin);
+  if (!container) return;
+
+  syncPdfReaderChrome(plugin, container);
+
+  const pageNumbers = container.querySelector('.pdf-page-numbers');
+  if (!pageNumbers?.parentElement) return;
+
+  const title = highlightToolbarTitle(plugin);
+  const restyleOn = plugin.settings.annotationRestyleEnabled !== false;
+  const darkOn = !!plugin.settings.readerDarkMode;
+
+  const existingGroup = pageNumbers.nextElementSibling;
+  if (existingGroup?.classList.contains(TOOLBAR_GROUP_CLASS)) {
+    const hl = existingGroup.querySelector(`.${TOOLBAR_BTN_CLASS}`);
+    if (hl) {
+      hl.setAttribute('aria-label', title);
+      (hl as HTMLButtonElement).title = title;
+    }
+    const restyle = existingGroup.querySelector(
+      `.${RESTYLE_BTN_CLASS}`
+    ) as HTMLElement | null;
+    restyle?.toggleClass('is-active', restyleOn);
+    const dark = existingGroup.querySelector(
+      `.${DARK_BTN_CLASS}`
+    ) as HTMLElement | null;
+    if (dark) {
+      dark.toggleClass('is-active', darkOn);
+      setIcon(dark, darkOn ? 'sun' : 'moon');
+      dark.setAttribute('aria-label', t('Toggle reader dark mode'));
+      dark.title = t('Toggle reader dark mode');
+    }
+    return;
+  }
+
+  container.querySelectorAll(`.${TOOLBAR_GROUP_CLASS}`).forEach((el) => el.remove());
+  container.querySelectorAll(`.${TOOLBAR_BTN_CLASS}`).forEach((el) => el.remove());
+
+  const group = document.createElement('div');
+  group.className = TOOLBAR_GROUP_CLASS;
+  group.append(
+    makeToolbarBtn('highlighter', title, TOOLBAR_BTN_CLASS, () => {
+      void createPdfHighlightFromSelection(plugin, { useSavedPrefs: true });
+    }),
+    makeToolbarBtn(
+      'palette',
+      t('Toggle annotation restyle'),
+      RESTYLE_BTN_CLASS,
+      () => {
+        plugin.settings.annotationRestyleEnabled =
+          plugin.settings.annotationRestyleEnabled === false;
+        void plugin.saveSettings();
+        injectPdfHighlightToolbarButton(plugin);
+        scheduleZoteroOverlayRender(plugin);
+      },
+      restyleOn
+    ),
+    makeToolbarBtn(
+      darkOn ? 'sun' : 'moon',
+      t('Toggle reader dark mode'),
+      DARK_BTN_CLASS,
+      () => {
+        plugin.settings.readerDarkMode = !plugin.settings.readerDarkMode;
+        void plugin.saveSettings();
+        injectPdfHighlightToolbarButton(plugin);
+        scheduleZoteroOverlayRender(plugin);
+      },
+      darkOn
+    )
+  );
+
+  pageNumbers.insertAdjacentElement('afterend', group);
 }
 
 function selectionInActivePdf(): boolean {

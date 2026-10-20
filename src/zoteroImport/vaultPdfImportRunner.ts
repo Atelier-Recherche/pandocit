@@ -46,8 +46,11 @@ export async function runVaultPdfImport(
   for (const row of selected) {
     opts.onProgress?.(done, total, row.vaultPath);
     try {
+      const isPdf = row.kind === 'pdf';
       const collectionKey =
-        row.pageCount > 0 && row.pageCount <= opts.shortPdfMaxPages
+        isPdf &&
+        row.pageCount > 0 &&
+        row.pageCount <= opts.shortPdfMaxPages
           ? opts.collectionShortKey
           : opts.collectionMainKey;
 
@@ -57,11 +60,14 @@ export async function runVaultPdfImport(
         fileBytes = await plugin.app.vault.readBinary(row.file);
       }
 
+      const itemType =
+        opts.itemType ?? (row.kind === 'epub' ? 'book' : undefined);
+
       const imp = await plugin.zoteroSync.importVaultPdfAsZoteroItem({
         title: row.title,
         creators: authorToCreators(row.author),
         citationKey: row.citekey,
-        itemType: opts.itemType,
+        itemType,
         attachmentMode: opts.attachmentMode,
         vaultPath: row.vaultPath,
         absolutePath,

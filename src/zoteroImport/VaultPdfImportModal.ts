@@ -267,7 +267,12 @@ export class VaultPdfImportModal extends Modal {
       tdFile.setText(vaultPdfBasename(row.vaultPath));
       tdFile.setAttr('title', row.vaultPath);
 
-      tr.createEl('td', { text: String(row.pageCount || '—') });
+      tr.createEl('td', {
+        text:
+          row.kind === 'pdf' && row.pageCount > 0
+            ? String(row.pageCount)
+            : '—',
+      });
 
       const tdTitle = tr.createEl('td');
       const titleIn = tdTitle.createEl('input', { type: 'text' });

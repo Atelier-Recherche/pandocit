@@ -23,7 +23,7 @@ export function getVaultPdfImportSettings(
 > &
   VaultPdfImportSettings {
   return {
-    includeExtensions: settings?.includeExtensions ?? ['.pdf'],
+    includeExtensions: settings?.includeExtensions ?? ['.pdf', '.epub'],
     shortPdfMaxPages: settings?.shortPdfMaxPages ?? 50,
     ...settings,
   };
@@ -55,7 +55,7 @@ export function shouldExcludeVaultPath(
     }
   }
 
-  const ext = rules.includeExtensions ?? ['.pdf'];
+  const ext = rules.includeExtensions ?? ['.pdf', '.epub'];
   const lower = norm.toLowerCase();
   const okExt = ext.some((e) => {
     const x = e.startsWith('.') ? e.toLowerCase() : `.${e.toLowerCase()}`;

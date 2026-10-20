@@ -41,6 +41,10 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   underlineCitekeys: false,
   zoteroApiLibraryType: 'user',
   zoteroApiMergeGroupIds: [],
+  annotationRestyleEnabled: true,
+  annotationRestyleBlackColor: '#ffd400',
+  annotationRestyleStyle: 'squiggly',
+  readerDarkMode: false,
 };
 
 export interface ZoteroGroup {
@@ -83,6 +87,18 @@ export interface ReferenceListSettings {
   epubHighlightLastColor?: string;
   epubHighlightLastOpacity?: number;
 
+  /**
+   * Restyle d’affichage des annotations (noir / vague).
+   * N’écrit pas dans Zotero. Défaut : activé.
+   */
+  annotationRestyleEnabled?: boolean;
+  /** Couleur de restyle (affichage uniquement). */
+  annotationRestyleBlackColor?: string;
+  /** Style de restyle : ligne, vague, pointillé. */
+  annotationRestyleStyle?: 'underline' | 'squiggly' | 'dotted';
+  /** Mode sombre des lecteurs PDF/EPUB (indépendant du thème Obsidian). */
+  readerDarkMode?: boolean;
+
   pullFromZotero?: boolean;
   zoteroPort?: string;
   zoteroGroups: ZoteroGroup[];
@@ -113,10 +129,11 @@ export interface VaultPdfImportMetadataRegex {
 }
 
 export interface VaultPdfImportSettings {
-  /** Dossier du coffre scanné par défaut à l’ouverture de l’import PDF → Zotero. */
+  /** Dossier du coffre scanné par défaut à l’ouverture de l’import → Zotero. */
   defaultVaultFolder?: string;
   excludeFolderGlobs?: string[];
   excludePathRegex?: string;
+  /** Extensions incluses, ex. `['.pdf', '.epub']`. */
   includeExtensions?: string[];
   shortPdfMaxPages?: number;
   metadataRegex?: VaultPdfImportMetadataRegex;
@@ -462,6 +479,59 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.openPdfLinksInNewTab !== false)
           .onChange((value) => {
             this.plugin.settings.openPdfLinksInNewTab = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Annotation restyle'))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.annotationRestyleEnabled !== false)
+          .onChange((value) => {
+            this.plugin.settings.annotationRestyleEnabled = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Restyle color'))
+      .addText((text) =>
+        text
+          .setPlaceholder('#ffd400')
+          .setValue(
+            this.plugin.settings.annotationRestyleBlackColor ?? '#ffd400'
+          )
+          .onChange((v) => {
+            this.plugin.settings.annotationRestyleBlackColor =
+              v.trim() || '#ffd400';
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Restyle style'))
+      .addDropdown((dd) => {
+        dd.addOption('underline', t('Restyle style underline'))
+          .addOption('squiggly', t('Restyle style squiggly'))
+          .addOption('dotted', t('Restyle style dotted'))
+          .setValue(this.plugin.settings.annotationRestyleStyle ?? 'squiggly')
+          .onChange((v) => {
+            this.plugin.settings.annotationRestyleStyle = v as
+              | 'underline'
+              | 'squiggly'
+              | 'dotted';
+            this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(t('Reader dark mode'))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(!!this.plugin.settings.readerDarkMode)
+          .onChange((value) => {
+            this.plugin.settings.readerDarkMode = value;
             this.plugin.saveSettings();
           })
       );
