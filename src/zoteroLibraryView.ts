@@ -3,6 +3,7 @@ import Fuse from 'fuse.js';
 import { langListRaw } from './bib/cslLangList';
 import { matchStoredLanguageToCslLocale } from './bib/zoteroLangNormalize';
 import ReferenceList from './main';
+import { askConfirm } from './askConfirmModal';
 import {
   getVaultRoot,
   insertTextInActiveMarkdownNote,
@@ -1157,7 +1158,7 @@ export class ZoteroLibraryPanel {
       return normalizeVaultRelativePath(v);
     }
     if (pathMod.isAbsolute(v)) return pathMod.normalize(v);
-    const root = getVaultRoot();
+    const root = getVaultRoot(this.plugin.app);
     if (!root) return v;
     return pathMod.join(root, v.replace(/^[/\\]+/, ''));
   }
@@ -1367,7 +1368,9 @@ export class ZoteroLibraryPanel {
     setIcon(delBtn, 'trash');
     delBtn.addEventListener('click', () => {
       void (async () => {
-        if (!window.confirm(t('Delete item from Zotero confirm'))) return;
+        if (!(await askConfirm(this.plugin.app, t('Delete item from Zotero confirm')))) {
+          return;
+        }
         const r = await this.plugin.zoteroSync.deleteLibraryItem(stored.key);
         if (r.ok) {
           new Notice(t('Item deleted'));
@@ -1686,7 +1689,7 @@ class ZoteroItemEditModal extends Modal {
     parentItem: StoredZoteroItem
   ): void {
     const resolveLinkedPath = (input: string): string =>
-      resolveVaultPdfAbsolutePath(input);
+      resolveVaultPdfAbsolutePath(this.plugin.app, input);
 
     const wrap = contentEl.createDiv({ cls: 'pwc-zotero-attachments' });
     wrap.createEl('div', {
@@ -1812,8 +1815,15 @@ class ZoteroItemEditModal extends Modal {
         btnRow
           .createEl('button', { text: t('Remove') })
           .addEventListener('click', () => {
-            if (!window.confirm(t('Delete attachment confirm'))) return;
             void (async () => {
+              if (
+                !(await askConfirm(
+                  this.plugin.app,
+                  t('Delete attachment confirm')
+                ))
+              ) {
+                return;
+              }
               const r = await this.plugin.zoteroSync.deleteLibraryItem(att.key);
               if (r.ok) {
                 new Notice(t('Attachment removed'));
@@ -1921,7 +1931,7 @@ class ZoteroItemEditModal extends Modal {
       }
       // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
       const picked = require('electron').remote.dialog.showOpenDialogSync({
-        defaultPath: getVaultRoot() || undefined,
+        defaultPath: getVaultRoot(this.plugin.app) || undefined,
         properties: ['openFile'],
       });
       if (picked?.length) filePathIn.value = picked[0];

@@ -142,7 +142,7 @@ export async function findZoteroAttachmentKeyForVaultFile(
 
     const linked = getLinkedFilePathFromAttachmentData(d);
     if (linked) {
-      const vaultPath = resolveVaultRelativePdfPath(linked);
+      const vaultPath = resolveVaultRelativePdfPath(plugin.app, linked);
       if (vaultPath && normPathKey(vaultPath) === normFile) {
         // Match chemin exact : priorité maximale, surtout si contentType cohérent.
         if (extOk) return st.key;

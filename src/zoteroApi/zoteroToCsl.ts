@@ -205,59 +205,59 @@ export function zoteroItemToCsl(
           break;
       }
     }
-    if (authors.length) (extraFields as any).author = authors;
-    if (editors.length) (extraFields as any).editor = editors;
-    if (translators.length) (extraFields as any).translator = translators;
+    if (authors.length) extraFields.author = authors;
+    if (editors.length) extraFields.editor = editors;
+    if (translators.length) extraFields.translator = translators;
     if (collectionEditors.length) {
-      (extraFields as any)['collection-editor'] = collectionEditors;
+      extraFields['collection-editor'] = collectionEditors;
     }
     if (containerAuthors.length) {
-      (extraFields as any)['container-author'] = containerAuthors;
+      extraFields['container-author'] = containerAuthors;
     }
-    if (composers.length) (extraFields as any).composer = composers;
+    if (composers.length) extraFields.composer = composers;
   }
 
   const issued = mapIssued(data.date);
-  if (issued) (extraFields as any).issued = issued;
+  if (issued) extraFields.issued = issued;
 
   if (typeof data.publicationTitle === 'string') {
-    (extraFields as any)['container-title'] = data.publicationTitle;
+    extraFields['container-title'] = data.publicationTitle;
   }
   if (typeof data.journalAbbreviation === 'string') {
-    (extraFields as any)['container-title-short'] = data.journalAbbreviation;
+    extraFields['container-title-short'] = data.journalAbbreviation;
   }
   if (typeof data.publisher === 'string') {
-    (extraFields as any).publisher = data.publisher;
+    extraFields.publisher = data.publisher;
   }
   if (typeof data.place === 'string') {
-    (extraFields as any)['publisher-place'] = data.place;
+    extraFields['publisher-place'] = data.place;
   }
   if (typeof data.DOI === 'string') {
-    (extraFields as any).DOI = data.DOI;
+    extraFields.DOI = data.DOI;
   }
   if (typeof data.url === 'string') {
-    (extraFields as any).URL = data.url;
+    extraFields.URL = data.url;
   }
   if (typeof data.volume === 'string' || typeof data.volume === 'number') {
-    (extraFields as any).volume = String(data.volume);
+    extraFields.volume = String(data.volume);
   }
   if (typeof data.issue === 'string' || typeof data.issue === 'number') {
-    (extraFields as any).issue = String(data.issue);
+    extraFields.issue = String(data.issue);
   }
   if (typeof data.pages === 'string') {
-    (extraFields as any).page = data.pages;
+    extraFields.page = data.pages;
   }
   if (typeof data.ISBN === 'string') {
-    (extraFields as any).ISBN = data.ISBN;
+    extraFields.ISBN = data.ISBN;
   }
   if (typeof data.ISSN === 'string') {
-    (extraFields as any).ISSN = data.ISSN;
+    extraFields.ISSN = data.ISSN;
   }
   if (typeof data.language === 'string') {
-    (extraFields as any).language = data.language;
+    extraFields.language = data.language;
   }
   if (typeof data.abstractNote === 'string') {
-    (extraFields as any).abstract = data.abstractNote;
+    extraFields.abstract = data.abstractNote;
   }
 
   return extraFields as PartialCSLEntry;

@@ -168,7 +168,7 @@ yarn install
 yarn build
 ```
 
-En CI / release, `yarn install` utilise `--ignore-scripts` et un cache Yarn local au runner (évite les corruptions du cache global `~/.cache/yarn`).
+En CI / release, `yarn install --frozen-lockfile` utilise un cache Yarn local au runner (évite les corruptions du cache global `~/.cache/yarn`).
 
 Le build produit notamment :
 
@@ -192,6 +192,19 @@ Dans le coffre, installez aussi **`pandoc.wasm`** via les réglages du plugin (o
 ## ⚠️ Limitations connues (WASM)
 
 Pandoc WASM tourne dans un bac à sable : pas d’accès réseau arbitraire ni d’exécution de commandes système. Ce plugin n’utilise que la conversion bibliographie → CSL JSON.
+
+## Revue catalogue Obsidian — comportements intentionnels
+
+Les contrôles automatisés peuvent signaler des accès qui restent **nécessaires** au fonctionnement desktop (pas de contournement sans perte de features) :
+
+| Signalement | Raison |
+| --- | --- |
+| Accès filesystem (`fs`) | Pièces jointes Zotero liées, bibliographies / cache CSL hors coffre, Better BibTeX en local |
+| Presse-papiers | Copie de citations et de références d’annotations |
+| Énumération du coffre | Résolution de PDF/EPUB et chemins flous |
+| Modules Node (`http` / `crypto` / …) | Uniquement derrière `Platform.isDesktop` (BBT localhost, hash upload Zotero) |
+
+Le plugin vise aussi mobile pour la lecture / sync API ; les chemins Node restent gardés bureau.
 
 ## 🔗 Ressources
 

@@ -54,7 +54,10 @@ export async function runVaultPdfImport(
           ? opts.collectionShortKey
           : opts.collectionMainKey;
 
-      const absolutePath = resolveVaultPdfAbsolutePath(row.vaultPath);
+      const absolutePath = resolveVaultPdfAbsolutePath(
+        plugin.app,
+        row.vaultPath
+      );
       let fileBytes: Uint8Array | undefined;
       if (opts.attachmentMode === 'upload') {
         fileBytes = await plugin.app.vault.readBinary(row.file);

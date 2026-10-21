@@ -117,7 +117,7 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
           cls: `pwc-zotero-overlay-rect pwc-zotero-overlay-rect--${markup}`,
         });
         if (readerDarkMode) el.addClass('pwc-zotero-overlay-rect--dark');
-        el.setCssStyles({
+        const styles: Partial<CSSStyleDeclaration> = {
           left: `${(rect.x / pageSize.width) * 100}%`,
           top: `${(rect.y / pageSize.height) * 100}%`,
           width: `${(rect.width / pageSize.width) * 100}%`,
@@ -127,28 +127,23 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
           opacity: String(
             markup === 'highlight' ? appearance.opacity : 0.98
           ),
-        });
-        el.style.setProperty('--pwc-ann-color', appearance.displayColor);
-        el.style.color = appearance.displayColor;
+          color: appearance.displayColor,
+        };
         if (markup === 'highlight') {
-          el.style.background = appearance.displayColor;
+          styles.background = appearance.displayColor;
         } else if (markup === 'squiggly') {
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = squigglyBackgroundImage(
+          styles.backgroundColor = 'transparent';
+          styles.backgroundImage = squigglyBackgroundImage(
             appearance.displayColor
           );
-          el.style.backgroundRepeat = 'repeat-x';
-          el.style.backgroundPosition = 'left bottom';
-          el.style.backgroundSize = '8px 4px';
         } else if (markup === 'dotted') {
-          el.style.backgroundColor = 'transparent';
-          el.style.backgroundImage = dottedBackgroundImage(
+          styles.backgroundColor = 'transparent';
+          styles.backgroundImage = dottedBackgroundImage(
             appearance.displayColor
           );
-          el.style.backgroundRepeat = 'repeat-x';
-          el.style.backgroundPosition = 'left bottom';
-          el.style.backgroundSize = '6px 4px';
         }
+        el.setCssStyles(styles);
+        el.setCssProps({ '--pwc-ann-color': appearance.displayColor });
         el.title = ann.comment || ann.text || 'Zotero annotation';
         el.addEventListener('click', (evt) => {
           evt.preventDefault();
@@ -157,8 +152,10 @@ export function renderZoteroOverlayOnActivePdf(plugin: ReferenceList): void {
             .querySelectorAll('.pwc-zotero-popup-wrapper')
             .forEach((n) => n.remove());
           const popupWrapper = pageEl.createDiv({ cls: 'pwc-zotero-popup-wrapper' });
-          popupWrapper.style.left = `${(rect.x / pageSize.width) * 100}%`;
-          popupWrapper.style.top = `${(rect.y / pageSize.height) * 100}%`;
+          popupWrapper.setCssStyles({
+            left: `${(rect.x / pageSize.width) * 100}%`,
+            top: `${(rect.y / pageSize.height) * 100}%`,
+          });
           const popup = popupWrapper.createDiv({ cls: 'popup' });
           popup.createDiv({
             cls: 'popupContent',

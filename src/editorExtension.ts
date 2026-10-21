@@ -11,6 +11,7 @@ import {
 } from '@codemirror/view';
 import { Tree } from '@lezer/common';
 import {
+  App,
   Keymap,
   editorInfoField,
   editorLivePreviewField,
@@ -120,9 +121,11 @@ function syncInlineFootnoteTypography(el: HTMLElement) {
   if (!ref) return;
 
   const computed = activeWindow.getComputedStyle(ref);
-  el.style.fontSize = computed.fontSize;
-  el.style.lineHeight = computed.lineHeight;
-  el.style.fontWeight = computed.fontWeight;
+  el.setCssStyles({
+    fontSize: computed.fontSize,
+    lineHeight: computed.lineHeight,
+    fontWeight: computed.fontWeight,
+  });
 }
 
 class CiteWidget extends WidgetType {
@@ -130,15 +133,18 @@ class CiteWidget extends WidgetType {
   sourcePath?: string;
   linkText?: string;
   inInlineFootnote: boolean;
+  app: App;
 
   constructor(
     cite: RenderedCitation,
+    app: App,
     sourcePath?: string,
     linkText?: string,
     inInlineFootnote = false
   ) {
     super();
     this.cite = cite;
+    this.app = app;
     this.sourcePath = sourcePath;
     this.linkText = linkText;
     this.inInlineFootnote = inInlineFootnote;
@@ -182,7 +188,7 @@ class CiteWidget extends WidgetType {
           span.addEventListener('click', (evt) => {
             const newPane = Keymap.isModEvent(evt);
             window.setTimeout(() => {
-              app.workspace.openLinkText(
+              this.app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,
                 newPane
@@ -217,12 +223,13 @@ class CiteWidget extends WidgetType {
 
 const citeDeco = (
   cite: RenderedCitation,
+  app: App,
   sourcePath?: string,
   linkText?: string,
   inInlineFootnote = false
 ) =>
   Decoration.replace({
-    widget: new CiteWidget(cite, sourcePath, linkText, inInlineFootnote),
+    widget: new CiteWidget(cite, app, sourcePath, linkText, inInlineFootnote),
   });
 
 function onlyValType(segs: Segment[]) {
@@ -253,9 +260,13 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
       }
     }
     mkDeco(view: EditorView) {
+      const bibManager = view.state.field(bibManagerField);
+      if (!bibManager?.plugin) {
+        return Decoration.none;
+      }
       const {
-        plugin: { settings },
-      } = view.state.field(bibManagerField);
+        plugin: { settings, app: pluginApp },
+      } = bibManager;
 
       const b = new RangeSetBuilder<Decoration>();
       const obsView = view.state.field(editorInfoField);
@@ -320,6 +331,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                   end,
                   citeDeco(
                     rendered,
+                    pluginApp,
                     obsView?.file.path,
                     linkText,
                     insideInlineFootnote

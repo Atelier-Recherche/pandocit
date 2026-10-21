@@ -61,10 +61,10 @@ export async function deleteDocumentAnnotation(
     return;
   }
   if (ann.source === 'sidecar' && vaultPath.toLowerCase().endsWith('.epub')) {
-    const remaining = (await readOrCreateSidecarAnnotations(vaultPath)).filter(
-      (a) => a.id !== ann.id
-    );
-    await saveEpubSidecar(vaultPath, remaining);
+    const remaining = (
+      await readOrCreateSidecarAnnotations(plugin.app, vaultPath)
+    ).filter((a) => a.id !== ann.id);
+    await saveEpubSidecar(plugin.app, vaultPath, remaining);
     await refreshEpubReaderAnnotations(plugin, vaultPath);
     new Notice(t('Annotation deleted'));
     return;

@@ -565,11 +565,11 @@ export async function applyEpubHighlight(
 
   if (wantsSidecar) {
 
-    const sidecar = await readOrCreateSidecarAnnotations(file.path);
+    const sidecar = await readOrCreateSidecarAnnotations(plugin.app, file.path);
 
     sidecar.push({ ...base, id: `epub-${Date.now()}`, source: 'sidecar' });
 
-    await saveEpubSidecar(file.path, sidecar);
+    await saveEpubSidecar(plugin.app, file.path, sidecar);
 
   }
 

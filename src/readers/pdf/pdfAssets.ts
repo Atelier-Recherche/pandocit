@@ -49,6 +49,7 @@ export function pdfGetDocumentInit(
     useSystemFonts: true,
     useWasm: true,
     useWorkerFetch: true,
+    enableScripting: false,
     wasmUrl: appendToResourceUrl(assetBase, 'wasm/'),
     standardFontDataUrl: appendToResourceUrl(assetBase, 'standard_fonts/'),
     iccUrl: appendToResourceUrl(assetBase, 'iccs/'),

@@ -135,7 +135,8 @@ body {
   gap: var(--size-4-2);
 }
 
-.csl-entry:has(> div + div) {
+/* Évite :has() (perf / lint Obsidian) — flex quand le wrapper a des boutons. */
+.csl-entry-wrapper .csl-entry {
   display: flex;
 }
 
@@ -1144,9 +1145,16 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   background-color: #1a1a1a !important;
 }
 
-/* Invert canvas seulement (JS pose aussi le filter). */
-.pwc-pdf-reader--dark .page .canvasWrapper {
+/* Invert canvas / miniatures (mode sombre PDF). */
+.pwc-pdf-reader--dark .page .canvasWrapper,
+.pwc-pdf-reader--dark .pdfViewer .canvasWrapper,
+.pwc-pdf-reader--dark .thumbnailImage {
   filter: invert(0.92) hue-rotate(180deg);
+}
+
+.pwc-reader-dark-bg {
+  background: #1a1a1a !important;
+  background-color: #1a1a1a !important;
 }
 
 .pwc-pdf-reader {
@@ -1182,6 +1190,10 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   background: var(--background-primary);
 }
 
+.pwc-pdf-reader__iframe--dark {
+  filter: invert(0.9) hue-rotate(180deg);
+}
+
 .pwc-zotero-overlay-layer {
   position: absolute;
   inset: 0;
@@ -1196,6 +1208,11 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   mix-blend-mode: multiply;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
   cursor: pointer;
+  color: var(--pwc-ann-color, #ffd400);
+}
+
+.pwc-zotero-overlay-rect--highlight {
+  background: var(--pwc-ann-color, #ffd400);
 }
 
 .pwc-zotero-overlay-rect--dark.pwc-zotero-overlay-rect--highlight {
@@ -1445,6 +1462,14 @@ body.pwc-cite-tap-mode .pwc-tooltip-cite-btn {
   color: var(--text-muted);
   line-height: 1.35;
 }
+
+.pwc-epub-reader__toc-item[data-depth='0'] { padding-left: 0.5rem; }
+.pwc-epub-reader__toc-item[data-depth='1'] { padding-left: 1.25rem; }
+.pwc-epub-reader__toc-item[data-depth='2'] { padding-left: 2rem; }
+.pwc-epub-reader__toc-item[data-depth='3'] { padding-left: 2.75rem; }
+.pwc-epub-reader__toc-item[data-depth='4'] { padding-left: 3.5rem; }
+.pwc-epub-reader__toc-item[data-depth='5'] { padding-left: 4.25rem; }
+.pwc-epub-reader__toc-item[data-depth='6'] { padding-left: 5rem; }
 
 .pwc-epub-reader__toc-item.is-clickable {
   cursor: pointer;

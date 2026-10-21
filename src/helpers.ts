@@ -19,10 +19,11 @@ export function logPdfOpen(
   message: string,
   details?: Record<string, unknown>
 ): void {
+  if (level === 'info') return;
   if (details) {
-    console[level](PDF_LOG, message, details);
+    console.warn(PDF_LOG, message, details);
   } else {
-    console[level](PDF_LOG, message);
+    console.warn(PDF_LOG, message);
   }
 }
 
@@ -49,7 +50,7 @@ export function normalizeVaultRelativePath(p: string): string {
   return p.trim().replace(/\\/g, '/').replace(/^\/+/, '');
 }
 
-export function getVaultRoot(): string {
+export function getVaultRoot(app: App): string {
   try {
     const adapter = app.vault.adapter;
     if (adapter instanceof FileSystemAdapter) {
@@ -66,8 +67,11 @@ export function getVaultRoot(): string {
  * Si `absPath` est sous la racine du coffre, retourne un chemin relatif avec `/`
  * (pour liens wiki). Sinon `null`.
  */
-export function absolutePathToVaultRelative(absPath: string): string | null {
-  const root = getVaultRoot();
+export function absolutePathToVaultRelative(
+  app: App,
+  absPath: string
+): string | null {
+  const root = getVaultRoot(app);
   if (!root || !absPath?.trim()) return null;
   const pathMod = getPath() as import('path').PlatformPath;
   if (typeof pathMod.relative !== 'function') return null;
@@ -91,7 +95,10 @@ function stripFileUrlPrefix(p: string): string {
 }
 
 /** Chemin exact tel qu’indexé par Obsidian (casse, séparateurs). */
-export function resolveVaultFilePath(relPath: string): string | null {
+export function resolveVaultFilePath(
+  app: App,
+  relPath: string
+): string | null {
   const cleaned = normalizeVaultRelativePath(relPath);
   if (!cleaned || cleaned.includes('..')) return null;
 
@@ -107,13 +114,13 @@ export function resolveVaultFilePath(relPath: string): string | null {
 }
 
 /** Cherche un fichier du coffre dont le chemin se termine comme `path` (chemins Zotero absolus d’un autre appareil). */
-function findVaultPathBySuffix(path: string): string | null {
+function findVaultPathBySuffix(app: App, path: string): string | null {
   const norm = stripFileUrlPrefix(path).replace(/\\/g, '/');
   const segments = norm.split('/').filter(Boolean);
   for (let len = segments.length; len >= 1; len--) {
     const suffix = segments.slice(-len).join('/');
     if (suffix.includes('..')) continue;
-    const canonical = resolveVaultFilePath(suffix);
+    const canonical = resolveVaultFilePath(app, suffix);
     if (canonical) return canonical;
   }
   return null;
@@ -132,10 +139,11 @@ export type PdfPathResolution = {
  * Résout un chemin Zotero vers un chemin relatif au coffre, avec journalisation des étapes.
  */
 export function resolveVaultRelativePdfPathDetailed(
+  app: App,
   path: string
 ): PdfPathResolution {
   const inputPath = path;
-  const vaultRoot = getVaultRoot();
+  const vaultRoot = getVaultRoot(app);
   const checkedPaths: string[] = [];
   const base: Omit<PdfPathResolution, 'rel' | 'strategy'> = {
     inputPath,
@@ -154,7 +162,7 @@ export function resolveVaultRelativePdfPathDetailed(
 
   const tryRel = (rel: string, strategy: string): PdfPathResolution | null => {
     checkedPaths.push(rel);
-    const canonical = resolveVaultFilePath(rel);
+    const canonical = resolveVaultFilePath(app, rel);
     if (canonical) {
       checkedPaths.push(canonical);
       return { ...base, rel: canonical, strategy };
@@ -171,14 +179,14 @@ export function resolveVaultRelativePdfPathDetailed(
   }
 
   if (isAbsoluteFilesystemPath(normalizedInput)) {
-    const fromRoot = absolutePathToVaultRelative(normalizedInput);
+    const fromRoot = absolutePathToVaultRelative(app, normalizedInput);
     if (fromRoot) {
       const hit = tryRel(fromRoot, 'absolute-under-vault-root');
       if (hit) return hit;
     }
   }
 
-  const bySuffix = findVaultPathBySuffix(normalizedInput);
+  const bySuffix = findVaultPathBySuffix(app, normalizedInput);
   if (bySuffix) {
     checkedPaths.push(bySuffix);
     return { ...base, rel: bySuffix, strategy: 'suffix-match' };
@@ -202,8 +210,11 @@ export function resolveVaultRelativePdfPathDetailed(
 /**
  * Chemin utilisable par `openLinkText` dans le coffre Obsidian, ou `null`.
  */
-export function resolveVaultRelativePdfPath(path: string): string | null {
-  return resolveVaultRelativePdfPathDetailed(path).rel;
+export function resolveVaultRelativePdfPath(
+  app: App,
+  path: string
+): string | null {
+  return resolveVaultRelativePdfPathDetailed(app, path).rel;
 }
 
 /**
@@ -215,6 +226,7 @@ function pdfOpenLeaf(newLeaf: boolean | PaneType): boolean | PaneType {
 }
 
 async function tryOpenLinkText(
+  app: App,
   linktext: string,
   sourcePath: string,
   newLeaf: boolean | PaneType
@@ -235,12 +247,13 @@ async function tryOpenLinkText(
 }
 
 async function tryOpenVaultPdfFile(
+  app: App,
   rel: string,
   sourcePath: string,
   page: number | null | undefined,
   newLeaf: boolean | PaneType
 ): Promise<boolean> {
-  const canonical = resolveVaultFilePath(rel) ?? rel;
+  const canonical = resolveVaultFilePath(app, rel) ?? rel;
   const abstract = app.vault.getAbstractFileByPath(canonical);
   const leafOpt = pdfOpenLeaf(newLeaf);
   const hasPage = page != null && Number.isFinite(page);
@@ -254,11 +267,13 @@ async function tryOpenVaultPdfFile(
 
   if (hasPage) {
     const linktext = `${canonical}#page=${page}`;
-    if (await tryOpenLinkText(linktext, sourcePath, leafOpt)) return true;
-    if (await tryOpenLinkText(`[[${linktext}]]`, sourcePath, leafOpt)) {
+    if (await tryOpenLinkText(app, linktext, sourcePath, leafOpt)) return true;
+    if (await tryOpenLinkText(app, `[[${linktext}]]`, sourcePath, leafOpt)) {
       return true;
     }
-    if (sourcePath && (await tryOpenLinkText(linktext, '', leafOpt))) return true;
+    if (sourcePath && (await tryOpenLinkText(app, linktext, '', leafOpt))) {
+      return true;
+    }
     return false;
   }
 
@@ -279,10 +294,14 @@ async function tryOpenVaultPdfFile(
     }
   }
 
-  if (await tryOpenLinkText(canonical, sourcePath, leafOpt)) return true;
-  if (await tryOpenLinkText(`[[${canonical}]]`, sourcePath, leafOpt)) return true;
-  if (sourcePath && (await tryOpenLinkText(canonical, '', leafOpt))) return true;
-  if (sourcePath && (await tryOpenLinkText(`[[${canonical}]]`, '', leafOpt))) {
+  if (await tryOpenLinkText(app, canonical, sourcePath, leafOpt)) return true;
+  if (await tryOpenLinkText(app, `[[${canonical}]]`, sourcePath, leafOpt)) {
+    return true;
+  }
+  if (sourcePath && (await tryOpenLinkText(app, canonical, '', leafOpt))) {
+    return true;
+  }
+  if (sourcePath && (await tryOpenLinkText(app, `[[${canonical}]]`, '', leafOpt))) {
     return true;
   }
 
@@ -295,12 +314,13 @@ async function tryOpenVaultPdfFile(
  * @param newLeaf `false` = même groupe de panneaux (souvent vue scindée), `'tab'` ou `true` = nouvel onglet.
  */
 export function openPdfAbsolutePathInObsidianOrExternal(
+  app: App,
   absPath: string,
   sourcePath: string,
   page: number | null | undefined,
   newLeaf: boolean | PaneType = 'tab'
 ): void {
-  const diag = resolveVaultRelativePdfPathDetailed(absPath);
+  const diag = resolveVaultRelativePdfPathDetailed(app, absPath);
   const rel = diag.rel;
 
   logPdfOpen('info', 'open attempt', {
@@ -317,7 +337,7 @@ export function openPdfAbsolutePathInObsidianOrExternal(
   });
 
   if (rel) {
-    void tryOpenVaultPdfFile(rel, sourcePath, page, newLeaf).then((ok) => {
+    void tryOpenVaultPdfFile(app, rel, sourcePath, page, newLeaf).then((ok) => {
       if (ok) return;
       logPdfOpen('warn', 'all vault open strategies failed', {
         rel,

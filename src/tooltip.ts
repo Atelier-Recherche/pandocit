@@ -28,14 +28,13 @@ function layoutCitationTooltip(
     citationInfoUsesTap() ? TOOLTIP_MAX_WIDTH_TAP : TOOLTIP_MAX_WIDTH_DESKTOP,
     vw - pad * 2
   );
+  let maxHeight = Math.max(80, vh - pad * 2);
   tooltip.setCssStyles({
     maxWidth: `${Math.max(120, maxW)}px`,
+    maxHeight: `${maxHeight}px`,
     left: '0px',
     top: '0px',
   });
-
-  const availH = Math.max(80, vh - pad * 2);
-  tooltip.style.maxHeight = `${availH}px`;
 
   const measure = () => tooltip.getBoundingClientRect();
   let rect = measure();
@@ -51,11 +50,12 @@ function layoutCitationTooltip(
       const spaceAbove = anchor.top - gap - pad;
       if (spaceBelow >= spaceAbove) {
         top = anchor.bottom + gap;
-        tooltip.style.maxHeight = `${Math.max(80, spaceBelow)}px`;
+        maxHeight = Math.max(80, spaceBelow);
       } else {
         top = pad;
-        tooltip.style.maxHeight = `${Math.max(80, spaceAbove)}px`;
+        maxHeight = Math.max(80, spaceAbove);
       }
+      tooltip.setCssStyles({ maxHeight: `${maxHeight}px` });
       rect = measure();
     }
   }
@@ -68,8 +68,10 @@ function layoutCitationTooltip(
   }
   left = Math.max(pad, left);
 
-  tooltip.style.top = `${top}px`;
-  tooltip.style.left = `${left}px`;
+  tooltip.setCssStyles({
+    top: `${top}px`,
+    left: `${left}px`,
+  });
 }
 
 /** Extrait un numéro de page typique du locator Pandoc (ex. `p78`, `pp. 12-14`). */
@@ -106,7 +108,7 @@ export class TooltipManager {
 
     if (!el.dataset.source) return;
 
-    const file = app.vault.getAbstractFileByPath(el.dataset.source);
+    const file = this.plugin.app.vault.getAbstractFileByPath(el.dataset.source);
     if (!file || !(file instanceof TFile)) {
       return;
     }
@@ -121,16 +123,13 @@ export class TooltipManager {
     if (el.dataset.noteIndex) {
       content = createDiv();
       const html = this.plugin.bibManager.getNoteForNoteIndex(
-        file as TFile,
+        file,
         el.dataset.noteIndex
       );
       content.append(...html);
     } else {
       for (const key of keys) {
-        const html = this.plugin.bibManager.getBibForCiteKey(
-          file as TFile,
-          key
-        ) as HTMLElement;
+        const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement;
 
         if (html) {
           if (!content) content = createFragment();

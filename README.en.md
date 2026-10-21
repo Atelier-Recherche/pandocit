@@ -166,7 +166,7 @@ yarn install
 yarn build
 ```
 
-CI/release uses `yarn install --frozen-lockfile --ignore-scripts` (skips `@codemirror/language` git `prepare` script).
+CI/release uses `yarn install --frozen-lockfile` with a runner-local Yarn cache.
 
 Build outputs include:
 

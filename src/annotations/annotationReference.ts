@@ -99,12 +99,12 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    const ta = document.createElement('textarea');
+    const ta = createEl('textarea');
     ta.value = text;
     document.body.appendChild(ta);
     ta.select();
     const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
+    ta.remove();
     return ok;
   }
 }
@@ -136,12 +136,12 @@ export async function resolveVaultPathForZoteroAttachment(
   const d = st.data as Record<string, unknown>;
   const linked = getLinkedFilePathFromAttachmentData(d);
   if (linked) {
-    const vault = resolveVaultRelativePdfPath(linked);
+    const vault = resolveVaultRelativePdfPath(plugin.app, linked);
     if (vault) return vault;
   }
   const raw = typeof d.path === 'string' ? d.path.trim() : '';
   if (raw && !raw.startsWith('attachments:') && !/^https?:\/\//i.test(raw)) {
-    const vault = resolveVaultRelativePdfPath(raw);
+    const vault = resolveVaultRelativePdfPath(plugin.app, raw);
     if (vault) return vault;
   }
   const base =

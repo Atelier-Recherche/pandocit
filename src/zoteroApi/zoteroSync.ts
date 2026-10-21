@@ -1040,7 +1040,6 @@ export class ZoteroSyncService {
     };
 
     const body = JSON.stringify([newData]);
-    const libVerBeforePost = snap.libraryVersion;
     let res = await this.client.postItems(
       route.prefix,
       snap.libraryVersion,

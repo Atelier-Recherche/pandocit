@@ -80,12 +80,15 @@ export async function openDocumentFromPlugin(
   }
 
   if (kind === 'pdf') {
-    const rel = resolveVaultRelativePdfPath(raw) ?? raw.replace(/\\/g, '/');
+    const rel =
+      resolveVaultRelativePdfPath(plugin.app, raw) ??
+      raw.replace(/\\/g, '/');
     if (opts.reuseOpenPdfLeaf) {
       const reused = await tryOpenPdfInExistingLeaf(plugin, rel, opts.page);
       if (reused) return;
     }
     openPdfAbsolutePathInObsidianOrExternal(
+      plugin.app,
       raw,
       '',
       opts.page ?? null,
@@ -105,7 +108,7 @@ export async function openDocumentFromPlugin(
 
   // Même résolution que les PDF : chemin Zotero absolu → relatif au coffre.
   const rel =
-    resolveVaultRelativePdfPath(raw) ??
+    resolveVaultRelativePdfPath(plugin.app, raw) ??
     raw.replace(/\\/g, '/').replace(/^\/+/, '');
   const file = plugin.app.vault.getAbstractFileByPath(rel);
   if (!(file instanceof TFile)) {
@@ -138,7 +141,13 @@ export async function openPdfForPlugin(
   page: number | null | undefined,
   newLeaf: boolean | import('obsidian').PaneType = 'tab'
 ): Promise<void> {
-  openPdfAbsolutePathInObsidianOrExternal(absPath, sourcePath, page, newLeaf);
+  openPdfAbsolutePathInObsidianOrExternal(
+    plugin.app,
+    absPath,
+    sourcePath,
+    page,
+    newLeaf
+  );
 }
 
 export { registerDocumentOpenRouter as registerFileOpenRouter } from './documentRouter';

@@ -1,6 +1,17 @@
+import type { App } from 'obsidian';
+import { Platform, requestUrl } from 'obsidian';
+
 import { CSLList, PartialCSLEntry } from './types';
 import { pandocConvertToCslJson } from '../pandocWasm';
-import { getPath, getFs, getHttps, isDesktop } from '../platformAdapter';
+import { getVaultRoot } from '../helpers';
+import {
+  getDownload,
+  getFs,
+  getHttp,
+  getHttps,
+  getPath,
+  isDesktop,
+} from '../platformAdapter';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
@@ -11,7 +22,7 @@ function ensureDir(dir: string) {
   }
 }
 
-export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
+export function getBibPath(bibPath: string, app?: App) {
   const path = getPath();
   const fs = getFs();
 
@@ -20,8 +31,8 @@ export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
   }
 
   const orig = bibPath;
-  if (getVaultRoot) {
-    const root = getVaultRoot();
+  if (app) {
+    const root = getVaultRoot(app);
     const abs = path.isAbsolute(bibPath) ? bibPath : path.join(root, bibPath);
     if (isDesktop() && !fs.existsSync(abs)) {
       throw new Error(`bibToCSL: cannot access bibliography file '${abs}'.`);
@@ -37,20 +48,19 @@ export function getBibPath(bibPath: string, getVaultRoot?: () => string) {
 
 export async function readBibliographyFile(
   bibPath: string,
-  getVaultRoot?: () => string
+  app?: App
 ): Promise<string> {
   const path = getPath();
-  const resolved = getBibPath(bibPath, getVaultRoot);
+  const resolved = getBibPath(bibPath, app);
 
   try {
-    const anyApp = app as any;
-    if (anyApp?.vault?.adapter?.read && getVaultRoot) {
-      const root = getVaultRoot();
+    if (app?.vault?.adapter?.read) {
+      const root = app ? getVaultRoot(app) : '';
       if (!root || resolved.startsWith(root) || !path.isAbsolute(resolved)) {
         const rel = root && resolved.startsWith(root)
           ? resolved.slice(root.length).replace(/^[\\/]/, '')
           : resolved.replace(/^[\\/]+/, '');
-        const data = await anyApp.vault.adapter.read(rel);
+        const data = await app.vault.adapter.read(rel);
         if (typeof data === 'string') return data;
       }
     }
@@ -73,18 +83,18 @@ export async function readBibliographyFile(
 
 export async function bibToCSL(
   bibPath: string,
-  getVaultRoot?: () => string
+  app?: App
 ): Promise<PartialCSLEntry[]> {
   const path = getPath();
-  const resolvedPath = getBibPath(bibPath, getVaultRoot);
+  const resolvedPath = getBibPath(bibPath, app);
 
   const parsed = path.parse(resolvedPath);
   if (parsed.ext === '.json') {
-    const contents = await readBibliographyFile(resolvedPath, getVaultRoot);
+    const contents = await readBibliographyFile(resolvedPath, app);
     return JSON.parse(contents);
   }
 
-  const contents = await readBibliographyFile(resolvedPath, getVaultRoot);
+  const contents = await readBibliographyFile(resolvedPath, app);
   const virtualName = `input${parsed.ext || '.bib'}`;
 
   const stdout = await pandocConvertToCslJson(virtualName, contents);
@@ -93,9 +103,11 @@ export async function bibToCSL(
 }
 
 async function fetchUrl(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
-  return res.text();
+  const res = await requestUrl({ url });
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`HTTP ${res.status}: ${url}`);
+  }
+  return res.text;
 }
 
 export async function getCSLLocale(
@@ -147,7 +159,8 @@ export async function getCSLStyle(
   styleCache: Map<string, string>,
   cacheDir: string,
   url: string,
-  explicitPath?: string
+  explicitPath?: string,
+  app?: App
 ) {
   const path = getPath();
   const fs = getFs();
@@ -170,9 +183,10 @@ export async function getCSLStyle(
     }
 
     try {
-      const anyApp = app as any;
-      if (anyApp?.vault?.adapter?.read) {
-        const data = await anyApp.vault.adapter.read(explicitPath.replace(/^[\\/]+/, ''));
+      if (app?.vault?.adapter?.read) {
+        const data = await app.vault.adapter.read(
+          explicitPath.replace(/^[\\/]+/, '')
+        );
         if (typeof data === 'string') {
           styleCache.set(explicitPath, data);
           return data;
@@ -233,10 +247,12 @@ function getGlobal() {
 export async function getZUserGroups(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<Array<{ id: number; name: string }>> {
-  if (!isDesktop()) return null;
+  if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const request = require('http').request;
+  const http = getHttp();
+  if (!http) return null;
+  const request = http.request;
   return new Promise((res, rej) => {
     const body = JSON.stringify({
       jsonrpc: '2.0',
@@ -292,10 +308,12 @@ export async function getZModified(
   groupId: number,
   since: number
 ): Promise<CSLList> {
-  if (!isDesktop()) return null;
+  if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const request = require('http').request;
+  const http = getHttp();
+  if (!http) return null;
+  const request = http.request;
   return new Promise((res, rej) => {
     const body = JSON.stringify({
       jsonrpc: '2.0',
@@ -346,7 +364,7 @@ export async function getZBib(
   groupId: number,
   loadCached?: boolean
 ) {
-  if (!isDesktop()) return null;
+  if (!Platform.isDesktop) return null;
 
   const path = getPath();
   const fs = getFs();
@@ -366,7 +384,8 @@ export async function getZBib(
     }
   }
 
-  const download = require('download');
+  const download = getDownload();
+  if (!download) return null;
   const bib = await download(
     `http://127.0.0.1:${port}/better-bibtex/export/library?/${groupId}/library.json`
   );
@@ -428,16 +447,17 @@ export async function refreshZBib(
 }
 
 export async function isZoteroRunning(port: string = DEFAULT_ZOTERO_PORT) {
-  if (!isDesktop()) return false;
+  if (!Platform.isDesktop) return false;
 
-  const download = require('download');
+  const download = getDownload();
+  if (!download) return false;
   const p = download(`http://127.0.0.1:${port}/better-bibtex/cayw?probe=true`);
   const res = await Promise.race([
     p,
-    new Promise((res) => {
+    new Promise((resolve) => {
       getGlobal().setTimeout(() => {
-        res(null);
-        p.destroy();
+        resolve(null);
+        p.destroy?.();
       }, 150);
     }),
   ]);
@@ -450,13 +470,18 @@ export async function getItemJSONFromCiteKeys(
   citeKeys: string[],
   libraryID: number
 ) {
-  if (!isDesktop()) return null;
+  if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const request = require('http').request;
-  let res: any;
+  const http = getHttp();
+  if (!http) return null;
+  const request = http.request;
+  let res: {
+    error?: { message?: string };
+    result?: string;
+  };
   try {
-    res = await new Promise((res, rej) => {
+    res = await new Promise((resolve, rej) => {
       const body = JSON.stringify({
         jsonrpc: '2.0',
         method: 'item.export',
@@ -474,16 +499,27 @@ export async function getItemJSONFromCiteKeys(
             'Content-Length': Buffer.byteLength(body),
           },
         },
-        (result: any) => {
+        (result: {
+          setEncoding: (enc: string) => void;
+          on: (ev: string, cb: (...args: unknown[]) => void) => void;
+        }) => {
           let output = '';
           result.setEncoding('utf8');
-          result.on('data', (chunk: string) => (output += chunk));
-          result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
+          result.on('data', (chunk: unknown) => {
+            output += String(chunk);
+          });
+          result.on('error', (e: unknown) =>
+            rej(
+              e instanceof Error
+                ? e
+                : new Error(`Error connecting to Zotero: ${String(e)}`)
+            )
+          );
           result.on('end', () => {
             try {
-              res(JSON.parse(output));
+              resolve(JSON.parse(output));
             } catch (e) {
-              rej(e);
+              rej(e instanceof Error ? e : new Error(String(e)));
             }
           });
         }

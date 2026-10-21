@@ -60,15 +60,33 @@ body {
 }
 `;
 
-function setBg(el: HTMLElement | null | undefined, dark: boolean): void {
+const SHADOW_DARK_STYLE_ID = 'pwc-epub-shadow-theme';
+
+function setReaderDarkBg(
+  el: HTMLElement | null | undefined,
+  dark: boolean
+): void {
   if (!el) return;
-  if (dark) {
-    el.style.setProperty('background', DARK_BG, 'important');
-    el.style.setProperty('background-color', DARK_BG, 'important');
-  } else {
-    el.style.removeProperty('background');
-    el.style.removeProperty('background-color');
+  el.toggleClass('pwc-reader-dark-bg', dark);
+}
+
+function ensureShadowThemeStyle(
+  root: ShadowRoot,
+  css: string | null
+): void {
+  let style = root.getElementById(
+    SHADOW_DARK_STYLE_ID
+  ) as HTMLStyleElement | null;
+  if (!css) {
+    style?.remove();
+    return;
   }
+  if (!style) {
+    style = root.ownerDocument.createElement('style');
+    style.id = SHADOW_DARK_STYLE_ID;
+    root.appendChild(style);
+  }
+  style.textContent = css;
 }
 
 /** Retire un mode sombre PDF posé par erreur hors d’un lecteur PDF. */
@@ -115,40 +133,8 @@ export function applyPdfNativeDarkMode(
   }
 
   for (const el of pdfRoots) {
-    if (dark) {
-      el.style.setProperty('--pdf-background', DARK_BG, 'important');
-      el.style.setProperty('--pdf-page-background', DARK_BG, 'important');
-      el.style.setProperty('--pdf-sidebar-background', DARK_BG, 'important');
-    } else {
-      el.style.removeProperty('--pdf-background');
-      el.style.removeProperty('--pdf-page-background');
-      el.style.removeProperty('--pdf-sidebar-background');
-    }
-    setBg(el, dark);
+    setReaderDarkBg(el, dark);
   }
-
-  const filter = dark ? READER_DARK_FILTER : '';
-  container
-    .querySelectorAll<HTMLElement>(
-      '.page .canvasWrapper, .pdfViewer .canvasWrapper, .thumbnailImage'
-    )
-    .forEach((el) => {
-      if (filter) el.style.setProperty('filter', filter);
-      else el.style.removeProperty('filter');
-    });
-
-  const viewer =
-    container.querySelector<HTMLElement>('.pdfViewer') ??
-    container.querySelector<HTMLElement>('.pdf-viewer');
-  if (viewer) viewer.style.removeProperty('filter');
-
-  container
-    .querySelectorAll<HTMLElement>(
-      '.pwc-zotero-overlay-layer, .pwc-zotero-popup-wrapper'
-    )
-    .forEach((el) => {
-      el.style.removeProperty('filter');
-    });
 }
 
 type FoliateRenderer = HTMLElement & {
@@ -194,7 +180,6 @@ export function applyFoliateDarkMode(
     iframeCount += root.querySelectorAll('iframe').length;
   }
   const canInvertIframe = iframeCount > 0;
-  const filter = dark ? READER_DARK_FILTER : '';
   const css = !dark
     ? EPUB_LIGHT_STYLES
     : canInvertIframe
@@ -211,60 +196,46 @@ export function applyFoliateDarkMode(
     }
   }
 
-  setBg(foliateEl, dark);
-  setBg(foliateEl.parentElement, dark);
+  setReaderDarkBg(foliateEl, dark);
+  setReaderDarkBg(foliateEl.parentElement, dark);
+  foliateEl.toggleClass('pwc-epub-host--dark-invert', dark && !canInvertIframe);
+  foliateEl.toggleClass(
+    'pwc-epub-host--dark-iframe',
+    dark && canInvertIframe
+  );
 
   for (const root of roots) {
+    const colBg = dark ? (canInvertIframe ? '#ffffff' : DARK_BG) : null;
+    const shadowCss = dark
+      ? `
+iframe { filter: ${canInvertIframe ? READER_DARK_FILTER : 'none'}; }
+#background, #background > div {
+  background: ${colBg} !important;
+  background-color: ${colBg} !important;
+}
+#container, #top {
+  ${!canInvertIframe ? `background: ${DARK_BG} !important; background-color: ${DARK_BG} !important;` : ''}
+}
+svg { filter: ${!canInvertIframe ? READER_DARK_FILTER : 'none'}; }
+`
+      : null;
+    ensureShadowThemeStyle(root, shadowCss);
+
     root.querySelectorAll('iframe').forEach((el) => {
-      const h = el as HTMLElement;
-      if (dark && canInvertIframe) h.style.setProperty('filter', filter);
-      else h.style.removeProperty('filter');
+      (el as HTMLElement).toggleClass(
+        'pwc-epub-iframe--dark',
+        dark && canInvertIframe
+      );
     });
 
-    const bg = root.getElementById('background');
-    if (bg) {
-      // Avec invert iframe : fond blanc (→ sombre après invert du part filter).
-      // Sans invert : fond directement sombre.
-      const colBg = dark ? (canInvertIframe ? '#ffffff' : DARK_BG) : '';
-      if (dark) {
-        bg.style.setProperty('background', colBg, 'important');
-        bg.style.setProperty('background-color', colBg, 'important');
-      } else {
-        bg.style.removeProperty('background');
-        bg.style.removeProperty('background-color');
-      }
-      bg.querySelectorAll<HTMLElement>('div').forEach((col) => {
-        if (dark) {
-          col.style.setProperty('background', colBg, 'important');
-          col.style.setProperty('background-color', colBg, 'important');
-        } else {
-          col.style.removeProperty('background');
-          col.style.removeProperty('background-color');
-        }
-      });
-    }
-    setBg(root.getElementById('container'), dark && !canInvertIframe);
-    setBg(root.getElementById('top'), dark && !canInvertIframe);
-  }
-
-  // Fallback shadow closed : invert host + contre-invert SVG overlays.
-  if (dark && !canInvertIframe) {
-    foliateEl.style.setProperty('filter', filter);
-    const svgs: Element[] = [];
-    for (const root of roots) {
-      root.querySelectorAll('svg').forEach((s) => svgs.push(s));
-    }
-    foliateEl.querySelectorAll('svg').forEach((s) => svgs.push(s));
-    for (const svg of svgs) {
-      (svg as HTMLElement).style.setProperty('filter', filter);
-    }
-  } else {
-    foliateEl.style.removeProperty('filter');
-    for (const root of roots) {
-      root.querySelectorAll('svg').forEach((s) => {
-        (s as HTMLElement).style.removeProperty('filter');
-      });
-    }
+    setReaderDarkBg(
+      root.getElementById('container') as HTMLElement | null,
+      dark && !canInvertIframe
+    );
+    setReaderDarkBg(
+      root.getElementById('top') as HTMLElement | null,
+      dark && !canInvertIframe
+    );
   }
 
   const contents = renderer?.getContents?.() ?? [];
@@ -278,24 +249,6 @@ export function applyFoliateDarkMode(
       head.appendChild(style);
     }
     style.textContent = css;
-
-    if (dark && !canInvertIframe) {
-      doc.documentElement.style.setProperty('--theme-bg-color', DARK_BG);
-      doc.documentElement.style.setProperty('background', DARK_BG, 'important');
-      doc.documentElement.style.setProperty('color', '#e8e8e8', 'important');
-      if (doc.body) {
-        doc.body.style.setProperty('color', '#e8e8e8', 'important');
-        doc.body.style.setProperty('background', 'none', 'important');
-      }
-    } else {
-      doc.documentElement.style.removeProperty('--theme-bg-color');
-      doc.documentElement.style.removeProperty('background');
-      doc.documentElement.style.removeProperty('color');
-      if (doc.body) {
-        doc.body.style.removeProperty('color');
-        doc.body.style.removeProperty('background');
-      }
-    }
   }
 
   window.requestAnimationFrame(() => {

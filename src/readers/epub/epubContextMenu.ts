@@ -1,5 +1,6 @@
 import { Menu, Notice } from 'obsidian';
 
+import { askConfirm } from '../../askConfirmModal';
 import { copyTextToClipboard } from '../../annotations/annotationReference';
 import type { DocumentAnnotation } from '../../annotations/types';
 import { t } from '../../lang/helpers';
@@ -53,7 +54,7 @@ function annotationFromEventTarget(
   view: EpubReaderView,
   target: EventTarget | null
 ): DocumentAnnotation | undefined {
-  if (!(target instanceof Element)) return undefined;
+  if (!target?.instanceOf(Element)) return undefined;
   let el: Element | null = target;
   while (el && !el.getAttribute?.(PWC_ANN_CFI_ATTR)) {
     el = el.parentElement;
@@ -87,7 +88,7 @@ function wireMenuDismiss(menu: Menu, eventDoc: Document | null): void {
         (menu as unknown as { containerEl?: HTMLElement }).containerEl ??
         (menu as unknown as { dom?: HTMLElement }).dom;
       if (menuEl?.contains(t)) return;
-      if (t instanceof Element && t.closest?.('.menu, .menu-item')) return;
+      if (t.instanceOf(Element) && t.closest?.('.menu, .menu-item')) return;
     }
     dismissEpubContextMenu();
   };
@@ -163,9 +164,14 @@ export function showEpubHighlightContextMenu(
       item.onClick(() => {
         const file = view.getFile();
         if (!file) return;
-        const ok = window.confirm(t('Delete annotation confirm'));
-        if (!ok) return;
-        void deleteDocumentAnnotation(plugin, file.path, match);
+        void (async () => {
+          const ok = await askConfirm(
+            plugin.app,
+            t('Delete annotation confirm')
+          );
+          if (!ok) return;
+          void deleteDocumentAnnotation(plugin, file.path, match);
+        })();
       });
     });
   }

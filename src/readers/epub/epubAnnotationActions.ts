@@ -70,10 +70,10 @@ export async function convertEpubAnnotationTarget(
       return;
     }
     if (choice.deleteSource) {
-      const remaining = (await readOrCreateSidecarAnnotations(vaultPath)).filter(
-        (a) => a.id !== ann.id
-      );
-      await saveEpubSidecar(vaultPath, remaining);
+      const remaining = (
+        await readOrCreateSidecarAnnotations(plugin.app, vaultPath)
+      ).filter((a) => a.id !== ann.id);
+      await saveEpubSidecar(plugin.app, vaultPath, remaining);
       await refreshEpubReaderAnnotations(plugin, vaultPath);
       new Notice(t('Annotation deleted'));
       return;
@@ -87,7 +87,7 @@ export async function convertEpubAnnotationTarget(
     new Notice(t('Annotation already in sidecar'));
     return;
   }
-  const sidecar = await readOrCreateSidecarAnnotations(vaultPath);
+  const sidecar = await readOrCreateSidecarAnnotations(plugin.app, vaultPath);
   const copy: DocumentAnnotation = {
     ...ann,
     id: `epub-${Date.now()}`,
@@ -95,7 +95,7 @@ export async function convertEpubAnnotationTarget(
     zoteroKey: undefined,
   };
   sidecar.push(copy);
-  await saveEpubSidecar(vaultPath, sidecar);
+  await saveEpubSidecar(plugin.app, vaultPath, sidecar);
   if (choice.deleteSource && ann.zoteroKey) {
     const res = await plugin.zoteroSync.deleteLibraryItem(ann.zoteroKey);
     if (!res.ok) {

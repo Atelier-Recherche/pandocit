@@ -31,6 +31,15 @@ let instance: WebAssembly.Instance | null = null;
 let fileSystem: Map<string, File> | null = null;
 let initialized = false;
 
+/** Chargeur des octets `pandoc.wasm` (vault adapter) — évite `fetch`. */
+let wasmBytesLoader: (() => Promise<ArrayBuffer>) | null = null;
+
+export function setPandocWasmBytesLoader(
+  loader: (() => Promise<ArrayBuffer>) | null
+): void {
+  wasmBytesLoader = loader;
+}
+
 function getWasmExports(inst: WebAssembly.Instance): PandocWasmExports {
   return inst.exports as unknown as PandocWasmExports;
 }
@@ -42,22 +51,17 @@ function getMemoryDataView() {
   return new DataView(getWasmExports(instance).memory.buffer);
 }
 
-async function instantiateWasm(): Promise<WebAssembly.Instance> {
-  const wasmUrl = 'pandoc.wasm';
-
-  if ('instantiateStreaming' in WebAssembly) {
-    try {
-      const res = await WebAssembly.instantiateStreaming(fetch(wasmUrl), {
-        wasi_snapshot_preview1: wasi!.wasiImport,
-      });
-      return res.instance;
-    } catch {
-      // Fallback below
-    }
+async function loadWasmBytes(): Promise<ArrayBuffer> {
+  if (!wasmBytesLoader) {
+    throw new Error(
+      'pandoc.wasm loader not configured (call setPandocWasmBytesLoader)'
+    );
   }
+  return wasmBytesLoader();
+}
 
-  const response = await fetch(wasmUrl);
-  const bytes = await response.arrayBuffer();
+async function instantiateWasm(): Promise<WebAssembly.Instance> {
+  const bytes = await loadWasmBytes();
   const res = await WebAssembly.instantiate(bytes, {
     wasi_snapshot_preview1: wasi!.wasiImport,
   });
@@ -75,7 +79,9 @@ async function initPandoc(): Promise<void> {
   fileSystem = new Map<string, File>();
   const fds = [
     new OpenFile(stdinFile),
-    ConsoleStdout.lineBuffered((msg) => console.log(`[WASI stdout] ${msg}`)),
+    ConsoleStdout.lineBuffered(() => {
+      /* WASI stdout silencieux en prod */
+    }),
     ConsoleStdout.lineBuffered((msg) => console.warn(`[WASI stderr] ${msg}`)),
     new PreopenDirectory('/', fileSystem),
   ];
@@ -122,23 +128,38 @@ async function initPandoc(): Promise<void> {
   initialized = true;
 }
 
+async function bytesFromBlobish(
+  data: Blob | ArrayBuffer | Uint8Array | string
+): Promise<Uint8Array> {
+  if (typeof data === 'string') {
+    return new TextEncoder().encode(data);
+  }
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (typeof (data as Blob).arrayBuffer === 'function') {
+    return new Uint8Array(await (data as Blob).arrayBuffer());
+  }
+  // jsdom Blob sans arrayBuffer
+  return new TextEncoder().encode(await (data as Blob).text());
+}
+
 async function addFileToFs(
   filename: string,
-  blob: Blob,
+  data: Blob | ArrayBuffer | Uint8Array | string,
   readonly: boolean
 ): Promise<void> {
   if (!fileSystem) {
     throw new Error('pandoc.wasm filesystem not initialized');
   }
-  const buffer = await blob.arrayBuffer();
-  const file = new File(new Uint8Array(buffer), { readonly });
+  const bytes = await bytesFromBlobish(data);
+  const file = new File(bytes, { readonly });
   fileSystem.set(filename, file);
 }
 
 async function convertInternal(
   options: PandocOptions,
   stdin: string | null,
-  files: Record<string, Blob>
+  files: Record<string, Blob | ArrayBuffer | Uint8Array | string>
 ): Promise<ConvertResult> {
   await initPandoc();
   if (!instance || !fileSystem || !wasi) {
@@ -205,15 +226,14 @@ export async function pandocConvertToCslJson(
   fileName: string,
   contents: string
 ): Promise<string> {
-  const files: Record<string, Blob> = {
-    [fileName]: new Blob([contents], { type: 'text/plain' }),
+  const files: Record<string, string> = {
+    [fileName]: contents,
   };
 
   const options: PandocOptions = {
     'input-files': [fileName],
     'output-file': null,
     to: 'csljson',
-    quiet: true,
   };
 
   const res = await convertInternal(options, null, files);

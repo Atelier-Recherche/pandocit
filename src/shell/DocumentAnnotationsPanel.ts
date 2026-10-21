@@ -1,5 +1,6 @@
 import { Notice, setIcon } from 'obsidian';
 
+import { askConfirm } from '../askConfirmModal';
 import {
   copyAnnotationReferenceNotice,
   formatDocumentAnnotationReference,
@@ -238,7 +239,11 @@ export class DocumentAnnotationsPanel {
       text: t('Go to'),
       cls: 'mod-cta',
     });
-    go.addEventListener('click', () => {
+    go.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      // Verrouille le panneau sur ce document avant navigation / focus leaf.
+      readerRegistry.setActive(vaultPath);
       const isEpub = vaultPath.toLowerCase().endsWith('.epub');
       if (isEpub && ann.cfi) {
         void openEpubAtAnnotation(this.plugin, vaultPath, ann.cfi, ann);
@@ -252,15 +257,25 @@ export class DocumentAnnotationsPanel {
     });
     const del = actions.createEl('button', { text: t('Delete') });
     del.addEventListener('click', () => {
-      const ok = window.confirm(t('Delete annotation confirm'));
-      if (!ok) return;
-      void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
+      void (async () => {
+        const ok = await askConfirm(
+          this.plugin.app,
+          t('Delete annotation confirm')
+        );
+        if (!ok) return;
+        void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
+      })();
     });
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      const ok = window.confirm(t('Delete annotation confirm'));
-      if (!ok) return;
-      void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
+      void (async () => {
+        const ok = await askConfirm(
+          this.plugin.app,
+          t('Delete annotation confirm')
+        );
+        if (!ok) return;
+        void deleteDocumentAnnotation(this.plugin, vaultPath, ann);
+      })();
     });
     const isEpubDoc = vaultPath.toLowerCase().endsWith('.epub');
     if (ann.source === 'local-pdf' || (isEpubDoc && ann.source === 'sidecar')) {

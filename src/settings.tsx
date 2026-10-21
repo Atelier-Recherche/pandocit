@@ -145,7 +145,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   plugin: ReferenceList;
 
   constructor(plugin: ReferenceList) {
-    super(app, plugin);
+    super(plugin.app, plugin);
     this.plugin = plugin;
   }
 

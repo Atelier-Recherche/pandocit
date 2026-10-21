@@ -7,9 +7,11 @@ import { t } from './lang/helpers';
 export const PANDOC_WASM_ZIP_URL =
   'https://github.com/jgm/pandoc/releases/download/3.9.0.2/pandoc.wasm.zip';
 
-/** Chemin relatif au coffre : dossier du plugin (ex. `.obsidian/plugins/<id>`). */
+/** Chemin relatif au coffre : dossier du plugin (`<configDir>/plugins/<id>`). */
 export function getPluginFolder(plugin: ReferenceList): string {
-  return normalizePath(`.obsidian/plugins/${plugin.manifest.id}`);
+  return normalizePath(
+    `${plugin.app.vault.configDir}/plugins/${plugin.manifest.id}`
+  );
 }
 
 /** Chemin relatif au coffre : `pandoc.wasm` à côté de `main.js`. */

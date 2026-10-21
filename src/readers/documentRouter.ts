@@ -160,21 +160,32 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
   );
 }
 
-/** Panneau / actions : actif = doc PDF/EPUB du leaf focusé (si déjà connu). */
-function syncActiveReaderFromWorkspace(plugin: ReferenceList): void {
-  const leaf = plugin.app.workspace.activeLeaf;
-  if (leaf?.view.getViewType() === epubReaderViewType) {
+/**
+ * Panneau annotations : actif = document du leaf lecteur focusé uniquement.
+ * Ne pas utiliser getActiveFile() quand le shell (ou un autre panneau) a le focus :
+ * Obsidian peut renvoyer un autre PDF/EPUB ouvert et le panneau bascule à tort.
+ */
+function syncActiveReaderFromWorkspace(_plugin: ReferenceList): void {
+  const leaf = _plugin.app.workspace.activeLeaf;
+  if (!leaf) return;
+
+  const viewType = leaf.view.getViewType();
+
+  if (viewType === epubReaderViewType || viewType === pdfReaderViewType) {
     const path = vaultPathFromViewState(leaf.getViewState().state);
     if (path && readerRegistry.has(path)) {
       readerRegistry.setActive(path);
-      return;
     }
+    return;
   }
 
-  const file = plugin.app.workspace.getActiveFile();
-  if (!(file instanceof TFile)) return;
-  if (!documentKindForFile(file)) return;
-  if (readerRegistry.has(file.path)) {
-    readerRegistry.setActive(file.path);
+  if (viewType === 'pdf') {
+    const vf = (leaf.view as { file?: TFile }).file;
+    if (vf instanceof TFile && readerRegistry.has(vf.path)) {
+      readerRegistry.setActive(vf.path);
+    }
+    return;
   }
+
+  // Shell PandoCit, markdown, etc. : conserver l’actif courant.
 }

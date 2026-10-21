@@ -30,7 +30,7 @@ export async function refreshEpubReaderAnnotations(
     }
   }
 
-  let annotations = await readOrCreateSidecarAnnotations(path);
+  let annotations = await readOrCreateSidecarAnnotations(plugin.app, path);
   const zoteroAttachmentKey = await findZoteroAttachmentKeyForVaultFile(
     plugin,
     file,

@@ -135,9 +135,10 @@ export class PdfReaderView extends ItemView {
       );
       const iframe = this.host.querySelector('iframe');
       if (iframe) {
-        iframe.style.filter = this.plugin.settings.readerDarkMode
-          ? 'invert(0.9) hue-rotate(180deg)'
-          : '';
+        iframe.toggleClass(
+          'pwc-pdf-reader__iframe--dark',
+          !!this.plugin.settings.readerDarkMode
+        );
       }
     });
   }
@@ -198,7 +199,8 @@ export class PdfReaderView extends ItemView {
       const bytes = await this.app.vault.readBinary(this.file);
       const blob = new Blob([bytes], { type: 'application/pdf' });
       this.pdfBlobUrl = URL.createObjectURL(blob);
-      (globalThis as any).pdfjsLib = pdfjsLib;
+      (activeWindow as unknown as { pdfjsLib: typeof pdfjsLib }).pdfjsLib =
+        pdfjsLib;
       await import('pdfjs-dist/legacy/web/pdf_viewer.mjs');
       this.iframe.srcdoc = this.buildInlineViewerSrcdoc(
         this.pdfBlobUrl,
@@ -275,7 +277,7 @@ export class PdfReaderView extends ItemView {
         annotationMode: 2,
       });
       linkService.setViewer(pdfViewer);
-      const loadingTask = pdfjsLib.getDocument({ url: ${safeFileUrl} });
+      const loadingTask = pdfjsLib.getDocument({ url: ${safeFileUrl}, enableScripting: false });
       const pdfDoc = await loadingTask.promise;
       pdfViewer.setDocument(pdfDoc);
       linkService.setDocument(pdfDoc, null);

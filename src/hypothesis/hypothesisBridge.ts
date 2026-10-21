@@ -95,13 +95,16 @@ export async function mergeHypothesisIntoEpubSidecar(
   const { readOrCreateSidecarAnnotations } = await import(
     '../readers/epub/epubSidecar'
   );
-  const existing = await readOrCreateSidecarAnnotations(epubVaultPath);
+  const existing = await readOrCreateSidecarAnnotations(
+    plugin.app,
+    epubVaultPath
+  );
   const ids = new Set(existing.map((a) => a.id));
   const merged = [...existing];
   for (const a of imported) {
     if (!ids.has(a.id)) merged.push(a);
   }
-  await saveEpubSidecar(epubVaultPath, merged);
+  await saveEpubSidecar(plugin.app, epubVaultPath, merged);
   new Notice(
     `${t('Hypothesis annotations imported')}: ${imported.length}`
   );

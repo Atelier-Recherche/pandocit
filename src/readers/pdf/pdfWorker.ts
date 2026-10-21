@@ -56,7 +56,7 @@ function configureFromFilesystem(plugin: Plugin): boolean {
   if (!base) return false;
   const full = pathMod.join(
     base,
-    '.obsidian',
+    plugin.app.vault.configDir,
     'plugins',
     plugin.manifest.id,
     'pdf.worker.min.mjs'

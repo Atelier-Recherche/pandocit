@@ -1,4 +1,4 @@
-import { Notice, normalizePath, requestUrl } from 'obsidian';
+import { Notice, normalizePath } from 'obsidian';
 
 import type ReferenceList from './main';
 import { t } from './lang/helpers';

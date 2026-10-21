@@ -97,8 +97,48 @@ export function getHttps(): typeof import('https') | null {
   _httpsTried = true;
   if (!Platform.isDesktop) return null;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- Node https, desktop only
     _https = require('https') as typeof import('https');
     return _https;
+  } catch {
+    return null;
+  }
+}
+
+let _http: typeof import('http') | null = null;
+let _httpTried = false;
+
+/** Module `http` Node — uniquement derrière `Platform.isDesktop`. */
+export function getHttp(): typeof import('http') | null {
+  if (_httpTried) return _http;
+  _httpTried = true;
+  if (!Platform.isDesktop) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- Node http, desktop only
+    _http = require('http') as typeof import('http');
+    return _http;
+  } catch {
+    return null;
+  }
+}
+
+type DownloadFn = (
+  url: string,
+  dest?: string
+) => Promise<Buffer> & { destroy?: () => void };
+
+let _download: DownloadFn | null = null;
+let _downloadTried = false;
+
+/** Package `download` — BBT localhost, desktop only. */
+export function getDownload(): DownloadFn | null {
+  if (_downloadTried) return _download;
+  _downloadTried = true;
+  if (!Platform.isDesktop) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- dep Node, desktop only
+    _download = require('download') as DownloadFn;
+    return _download;
   } catch {
     return null;
   }

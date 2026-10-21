@@ -51,6 +51,8 @@ import {
   setFormattedCitationsEnabled,
   syncCitationUiClasses,
 } from './citationUi';
+import { setPandocWasmBytesLoader } from './pandocWasm';
+import { getPandocWasmPath } from './pandocWasmInstall';
 
 export default class ReferenceList extends Plugin {
   settings: ReferenceListSettings;
@@ -72,9 +74,18 @@ export default class ReferenceList extends Plugin {
   }
 
   async onload() {
-    const { app } = this;
-
     await this.loadSettings();
+
+    setPandocWasmBytesLoader(async () => {
+      const p = getPandocWasmPath(this);
+      const data = await this.app.vault.adapter.readBinary(p);
+      return data instanceof ArrayBuffer
+        ? data
+        : (data as Uint8Array).buffer.slice(
+            (data as Uint8Array).byteOffset,
+            (data as Uint8Array).byteOffset + (data as Uint8Array).byteLength
+          );
+    });
 
     this.registerView(
       shellViewType,
@@ -94,7 +105,7 @@ export default class ReferenceList extends Plugin {
 
     this.zoteroSync = new ZoteroSyncService(this);
     this.zoteroAnnotationIndex = new ZoteroAnnotationIndex();
-    this.cacheDir = getPath().join(getVaultRoot(), '.pandoc');
+    this.cacheDir = getPath().join(getVaultRoot(this.app), '.pandoc');
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
     this.initPromise.promise
@@ -119,7 +130,7 @@ export default class ReferenceList extends Plugin {
     void this.migrateLegacyLeaves();
 
     this.addSettingTab(new ReferenceListSettingsTab(this));
-    this.registerEditorSuggest(new CiteSuggest(app, this));
+    this.registerEditorSuggest(new CiteSuggest(this.app, this));
     this.tooltipManager = new TooltipManager(this);
     this.registerMarkdownPostProcessor(processCiteKeys(this));
     this.registerEditorExtension([
@@ -231,7 +242,7 @@ export default class ReferenceList extends Plugin {
         await this.zoteroAnnotationIndex.refresh(this);
         this.bibManager.reinit(true);
         await this.bibManager.initPromise.promise;
-        this.processReferences();
+        void this.processReferences();
         await this.shell?.zoteroPanel?.refreshList();
         this.emitter.trigger('pwc-zotero-synced');
         const { refreshEpubReaderAnnotations } = await import(
@@ -273,16 +284,16 @@ export default class ReferenceList extends Plugin {
     syncCitationUiClasses(this.settings);
 
     this.registerEvent(
-      app.metadataCache.on(
+      this.app.metadataCache.on(
         'changed',
         debounce(
           async (file) => {
             await this.initPromise.promise;
             await this.bibManager.initPromise.promise;
 
-            const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+            const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView && file === activeView.file) {
-              this.processReferences();
+              void this.processReferences();
             }
           },
           100,
@@ -292,17 +303,17 @@ export default class ReferenceList extends Plugin {
     );
 
     this.registerEvent(
-      app.workspace.on(
+      this.app.workspace.on(
         'active-leaf-change',
         debounce(
           async (leaf) => {
             await this.initPromise.promise;
             await this.bibManager.initPromise.promise;
 
-            app.workspace.iterateRootLeaves((rootLeaf) => {
+            this.app.workspace.iterateRootLeaves((rootLeaf) => {
               if (rootLeaf === leaf) {
                 if (leaf.view instanceof MarkdownView) {
-                  this.processReferences();
+                  void this.processReferences();
                 } else {
                   this.shell?.refsPanel.setNoContentMessage();
                 }
@@ -324,7 +335,7 @@ export default class ReferenceList extends Plugin {
       await this.bibManager.initPromise.promise;
 
       this.setStatusBarIdle();
-      this.processReferences();
+      void this.processReferences();
     })();
   }
 
@@ -370,7 +381,7 @@ export default class ReferenceList extends Plugin {
       this.app.workspace.revealLeaf(existing.leaf);
       existing.switchTab(tab);
       this.pendingShellTab = undefined;
-      if (tab === 'references') this.processReferences();
+      if (tab === 'references') void this.processReferences();
       return;
     }
 
@@ -382,7 +393,7 @@ export default class ReferenceList extends Plugin {
 
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
-    if (tab === 'references') this.processReferences();
+    if (tab === 'references') void this.processReferences();
     this.shell?.switchTab(tab);
   }
 
@@ -470,7 +481,7 @@ export default class ReferenceList extends Plugin {
                   const cache = this.bibManager.fileCache.get(file);
                   if (cache.source !== this.bibManager) {
                     this.bibManager.fileCache.delete(file);
-                    this.processReferences();
+                    void this.processReferences();
                     return;
                   }
                 }
@@ -484,7 +495,7 @@ export default class ReferenceList extends Plugin {
 
               this.bibManager.reinit(true);
               await this.bibManager.initPromise.promise;
-              this.processReferences();
+              void this.processReferences();
             })
         );
 
@@ -555,9 +566,9 @@ export default class ReferenceList extends Plugin {
           !!this.settings.hideLinks
         );
 
-        cb && cb();
+        if (cb) cb();
 
-        this.processReferences();
+        void this.processReferences();
       }
     },
     5000,

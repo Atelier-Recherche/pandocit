@@ -1,4 +1,4 @@
-import { TFile, normalizePath } from 'obsidian';
+import { App, TFile, normalizePath } from 'obsidian';
 
 import type { DocumentAnnotation } from '../../annotations/types';
 
@@ -15,6 +15,7 @@ export interface EpubSidecarFile {
 }
 
 export async function loadEpubSidecar(
+  app: App,
   file: TFile
 ): Promise<DocumentAnnotation[]> {
   try {
@@ -31,6 +32,7 @@ export async function loadEpubSidecar(
 }
 
 export async function saveEpubSidecar(
+  app: App,
   epubPath: string,
   annotations: DocumentAnnotation[]
 ): Promise<void> {
@@ -50,10 +52,11 @@ export async function saveEpubSidecar(
 }
 
 export async function readOrCreateSidecarAnnotations(
+  app: App,
   epubPath: string
 ): Promise<DocumentAnnotation[]> {
   const path = sidecarPathForEpub(epubPath);
   const f = app.vault.getAbstractFileByPath(path);
-  if (f instanceof TFile) return loadEpubSidecar(f);
+  if (f instanceof TFile) return loadEpubSidecar(app, f);
   return [];
 }

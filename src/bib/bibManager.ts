@@ -71,8 +71,11 @@ export interface FileCache {
   };
 }
 
-function getScopedSettings(file: TFile): ScopedSettings {
-  const metadata = app.metadataCache.getFileCache(file);
+function getScopedSettings(
+  plugin: ReferenceList,
+  file: TFile
+): ScopedSettings {
+  const metadata = plugin.app.metadataCache.getFileCache(file);
   const output: ScopedSettings = {};
 
   if (!metadata?.frontmatter) {
@@ -97,7 +100,7 @@ function getScopedSettings(file: TFile): ScopedSettings {
 
   const pathApi = getPath();
   const fsApi = getFs();
-  const root = getVaultRoot();
+  const root = getVaultRoot(plugin.app);
   if (root && output.bibliography && fsApi.existsSync(pathApi.join(root, pathApi.dirname(file.path), output.bibliography))) {
     output.bibliography = pathApi.join(root, pathApi.dirname(file.path), output.bibliography);
   }
@@ -303,7 +306,7 @@ export class BibManager {
     if (ext !== '.bib' && ext !== '.bibtex') return;
 
     try {
-      const contents = await readBibliographyFile(trimmed, getVaultRoot);
+      const contents = await readBibliographyFile(trimmed, this.plugin.app);
       const parsed = parseBibTeXFilePaths(contents);
 
       if (opts?.replace) {
@@ -392,7 +395,7 @@ export class BibManager {
 
     if (settings.bibliography) {
       try {
-        const bib = await bibToCSL(settings.bibliography, getVaultRoot);
+        const bib = await bibToCSL(settings.bibliography, this.plugin.app);
 
         if (pluginSettings.pullFromZoteroApi) {
           for (const entry of bib) {
@@ -468,10 +471,10 @@ export class BibManager {
     }
 
     if (!fromCache || this.bibCache.size === 0) {
-      const bib = await bibToCSL(settings.pathToBibliography, getVaultRoot);
+      const bib = await bibToCSL(settings.pathToBibliography, this.plugin.app);
 
       this.bibCache = new Map();
-      const bibPath = getBibPath(settings.pathToBibliography, getVaultRoot);
+      const bibPath = getBibPath(settings.pathToBibliography, this.plugin.app);
 
       if (isDesktop() && bibPath && !this.watcherCache.has(bibPath)) {
         const fsApi = getFs();
@@ -828,7 +831,8 @@ export class BibManager {
             this.styleCache,
             this.plugin.cacheDir,
             style.id,
-            style.explicitPath
+            style.explicitPath,
+            this.plugin.app
           )
         );
       }
@@ -897,7 +901,7 @@ export class BibManager {
       ? this.fileCache.get(file)
       : null;
     const citeBibMap = new Map<string, string>();
-    const settings = getScopedSettings(file);
+    const settings = getScopedSettings(this.plugin, file);
 
     processed.forEach((p) =>
       p.citations.forEach((c) => {
@@ -935,7 +939,7 @@ export class BibManager {
     }
 
     if (isDesktop() && settings?.bibliography) {
-      const bibPath = getBibPath(settings.bibliography, getVaultRoot);
+      const bibPath = getBibPath(settings.bibliography, this.plugin.app);
       if (!this.watcherCache.has(bibPath)) {
         const fsApi = getFs();
         let dbTimer = 0;
@@ -1102,13 +1106,13 @@ export class BibManager {
         const zWebLinks =
           this.zCitekeyToWebLinks.get(e.dataset.citekey) ?? [];
         let linkText = '@' + e.dataset.citekey;
-        let linkDest = app.metadataCache.getFirstLinkpathDest(
+        let linkDest = this.plugin.app.metadataCache.getFirstLinkpathDest(
           linkText,
           file.path
         );
         if (!linkDest) {
           linkText = e.dataset.citekey;
-          linkDest = app.metadataCache.getFirstLinkpathDest(
+          linkDest = this.plugin.app.metadataCache.getFirstLinkpathDest(
             linkText,
             file.path
           );
@@ -1124,7 +1128,11 @@ export class BibManager {
               div.setAttr('aria-label', t('Open literature note'));
               div.onClickEvent((e) => {
                 const newPane = Keymap.isModEvent(e);
-                app.workspace.openLinkText(linkText, file.path, newPane);
+                this.plugin.app.workspace.openLinkText(
+                  linkText,
+                  file.path,
+                  newPane
+                );
               });
             });
           }
@@ -1173,7 +1181,7 @@ export class BibManager {
   }
 
   dispatchResult(file: TFile, result: FileCache) {
-    app.workspace.getLeavesOfType('markdown').forEach((l) => {
+    this.plugin.app.workspace.getLeavesOfType('markdown').forEach((l) => {
       const view = l.view as MarkdownView;
       if (view.file === file) {
         const renderer = (view.previewMode as any).renderer;
@@ -1202,7 +1210,7 @@ export class BibManager {
   }
 
   getCacheForPath(filePath: string) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
       return cache;
@@ -1212,7 +1220,7 @@ export class BibManager {
   }
 
   getResolution(filePath: string, key: string) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
       return {
@@ -1228,10 +1236,10 @@ export class BibManager {
   }
 
   getCitationsForSection(filePath: string, lineStart: number, lineEnd: number) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
-      const mCache = app.metadataCache.getCache(filePath);
+      const mCache = this.plugin.app.metadataCache.getCache(filePath);
 
       const section = mCache.sections?.find(
         (s) =>

@@ -521,7 +521,6 @@ export class EpubReaderView extends ItemView {
           attr: { 'data-depth': String(depth) },
         });
         if (item.href) row.dataset.href = item.href;
-        row.style.paddingLeft = `${0.5 + depth * 0.75}rem`;
         row.createSpan({ text: item.label?.trim() || '—' });
         if (item.href) {
           row.addClass('is-clickable');
@@ -639,8 +638,10 @@ export class EpubReaderView extends ItemView {
             blendMode: appearance.blendMode,
           });
           g.setAttribute(attr, cfi);
-          g.style.pointerEvents = 'visiblePainted';
-          g.style.cursor = 'context-menu';
+          g.setCssStyles({
+            pointerEvents: 'visiblePainted',
+            cursor: 'context-menu',
+          });
           return g;
         } catch (e) {
           console.warn('[PandoCit EPUB] draw-annotation', e);
@@ -727,13 +728,6 @@ export class EpubReaderView extends ItemView {
         console.warn('[PandoCit EPUB] addAnnotation', a.value.slice(0, 64), e);
       }
     }
-    console.info('[PandoCit EPUB] applied overlays', {
-      total: this.annotations.length,
-      withCfi: payloads.length,
-      drawn: ok,
-      removed: toRemove.length,
-      keptCfiKeys: next.size,
-    });
   }
 
   private captureSelection(doc: Document, index: number): void {
@@ -921,7 +915,7 @@ export class EpubReaderView extends ItemView {
       const blob = new Blob([bytes], { type: 'application/epub+zip' });
       const fileObj = new File([blob], f.name, { type: 'application/epub+zip' });
 
-      this.annotations = await readOrCreateSidecarAnnotations(f.path);
+      this.annotations = await readOrCreateSidecarAnnotations(this.app, f.path);
       await this.mergeZoteroAnnotations();
       if (gen !== this.loadGeneration) return;
 
@@ -992,9 +986,6 @@ export class EpubReaderView extends ItemView {
       );
     }
     if (!this.zoteroAttachmentKey) {
-      console.info('[PandoCit EPUB] no Zotero attachment match', {
-        vaultPath: this.file.path,
-      });
       return;
     }
 
@@ -1003,12 +994,6 @@ export class EpubReaderView extends ItemView {
       snap,
       this.zoteroAttachmentKey
     );
-    console.info('[PandoCit EPUB] Zotero annotations', {
-      vaultPath: this.file.path,
-      attachmentKey: this.zoteroAttachmentKey,
-      count: zot.length,
-      libraryVersion: snap.libraryVersion,
-    });
     const ids = new Set(this.annotations.map((a) => a.id));
     for (const a of zot) {
       if (!ids.has(a.id)) this.annotations.push(a);
@@ -1018,7 +1003,7 @@ export class EpubReaderView extends ItemView {
   private async persistSidecar(): Promise<void> {
     if (!this.file) return;
     const sidecarOnly = this.annotations.filter((a) => a.source === 'sidecar');
-    await saveEpubSidecar(this.file.path, sidecarOnly);
+    await saveEpubSidecar(this.app, this.file.path, sidecarOnly);
   }
 
   private syncRegistry(): void {

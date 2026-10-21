@@ -125,11 +125,11 @@ function makeToolbarBtn(
   onClick: () => void,
   active?: boolean
 ): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = `clickable-icon ${className}${active ? ' is-active' : ''}`;
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
+  const btn = createEl('button', {
+    type: 'button',
+    cls: `clickable-icon ${className}${active ? ' is-active' : ''}`,
+    attr: { 'aria-label': label, title: label },
+  });
   setIcon(btn, icon);
   btn.addEventListener(
     'pointerdown',
@@ -197,8 +197,7 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
   container.querySelectorAll(`.${TOOLBAR_GROUP_CLASS}`).forEach((el) => el.remove());
   container.querySelectorAll(`.${TOOLBAR_BTN_CLASS}`).forEach((el) => el.remove());
 
-  const group = document.createElement('div');
-  group.className = TOOLBAR_GROUP_CLASS;
+  const group = createDiv({ cls: TOOLBAR_GROUP_CLASS });
   group.append(
     makeToolbarBtn('list', t('Table of contents'), TOC_BTN_CLASS, () => {
       showPdfOutlineSidebar(container);
@@ -260,7 +259,7 @@ function selectionInActivePdf(): boolean {
 function contextTargetInPdf(evt: MouseEvent): boolean {
   const t = evt.target;
   if (!(t instanceof Node)) return false;
-  const el = t instanceof HTMLElement ? t : t.parentElement;
+  const el = t.instanceOf(HTMLElement) ? t : t.parentElement;
   if (!el) return false;
   return !!el.closest('[data-page-number], .pdf-viewer, .pdf-toolbar, .workspace-leaf');
 }
