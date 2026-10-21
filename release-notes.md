@@ -1,2 +1,1 @@
-0dbe3f4 Enhance EPUB and PDF reader functionality with new features and localization updates
-8ee766d Enhance EPUB and annotation features with dark mode and restyle options
+5945c42 Update to version 2.0.62 with various enhancements and dependency updates
