@@ -5,12 +5,13 @@ import {
   Notice,
   Platform,
   TFile,
+  View,
   htmlToMarkdown,
 } from 'obsidian';
-import type { PaneType } from 'obsidian';
+import type { PaneType, WorkspaceLeaf } from 'obsidian';
 
 import { t } from './lang/helpers';
-import { getPath } from './platformAdapter';
+import { getPath, writeElectronClipboard } from './platformAdapter';
 
 const PDF_LOG = '[PandoCit PDF]';
 
@@ -73,8 +74,7 @@ export function absolutePathToVaultRelative(
 ): string | null {
   const root = getVaultRoot(app);
   if (!root || !absPath?.trim()) return null;
-  const pathMod = getPath() as import('path').PlatformPath;
-  if (typeof pathMod.relative !== 'function') return null;
+  const pathMod = getPath();
   const r = pathMod.normalize(root);
   const a = pathMod.normalize(absPath.trim());
   const rel = pathMod.relative(r, a);
@@ -234,10 +234,7 @@ async function tryOpenLinkText(
   const leaf = pdfOpenLeaf(newLeaf);
   logPdfOpen('info', 'trying openLinkText', { linktext, sourcePath, newLeaf: leaf });
   try {
-    const result = app.workspace.openLinkText(linktext, sourcePath, leaf);
-    if (result && typeof (result as Promise<void>).then === 'function') {
-      await (result as Promise<void>);
-    }
+    await app.workspace.openLinkText(linktext, sourcePath, leaf);
     logPdfOpen('info', 'openLinkText ok', { linktext });
     return true;
   } catch (err) {
@@ -280,10 +277,7 @@ async function tryOpenVaultPdfFile(
   if (abstract instanceof TFile) {
     try {
       const leaf = app.workspace.getLeaf(leafOpt);
-      const result = leaf.openFile(abstract);
-      if (result && typeof (result as Promise<void>).then === 'function') {
-        await (result as Promise<void>);
-      }
+      await leaf.openFile(abstract);
       logPdfOpen('info', 'openFile ok', { path: canonical });
       return true;
     } catch (err) {
@@ -393,10 +387,7 @@ export function copyElToClipboard(el: HTMLElement) {
 
   if (Platform.isDesktop) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
-      const { clipboard } = require('electron');
-      clipboard.write({ html, text });
-      return;
+      if (writeElectronClipboard({ html, text })) return;
     } catch (e) {
       console.error('Failed to access electron clipboard', e);
     }
@@ -413,7 +404,7 @@ export class PromiseCapability<T> {
   settled = false;
   promise: Promise<T>;
   resolve: (data: T) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: Error) => void;
 
   constructor() {
     this.promise = new Promise((resolve, reject) => {
@@ -428,6 +419,24 @@ export class PromiseCapability<T> {
       };
     });
   }
+}
+
+/** `ArrayBuffer` couvrant exactement les octets de la vue (copie seulement si nécessaire). */
+export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = bytes;
+  if (
+    buffer instanceof ArrayBuffer &&
+    byteOffset === 0 &&
+    byteLength === buffer.byteLength
+  ) {
+    return buffer;
+  }
+  return bytes.slice().buffer;
+}
+
+/** Feuille focusée (y compris panneaux latéraux), sans l’API dépréciée `workspace.activeLeaf`. */
+export function getActiveLeaf(app: App): WorkspaceLeaf | null {
+  return app.workspace.getActiveViewOfType(View)?.leaf ?? null;
 }
 
 export function areSetsEqual<T>(as: Set<T>, bs: Set<T>) {
@@ -468,7 +477,7 @@ export function insertTextInActiveMarkdownNote(app: App, text: string): boolean 
     return true;
   }
 
-  const activeView = workspace.activeLeaf?.view;
+  const activeView = getActiveLeaf(app)?.view;
   if (activeView instanceof MarkdownView && activeView.editor) {
     return insert(activeView);
   }

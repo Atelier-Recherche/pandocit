@@ -159,14 +159,14 @@ export function zoteroItemToCsl(
     (typeof data.shortTitle === 'string' && data.shortTitle) ||
     id;
 
-  const extraFields: Record<string, unknown> = {
+  const extraFields: PartialCSLEntry & Record<string, unknown> = {
     id,
     title,
     type: zoteroTypeToCsl(itemType),
   };
 
   if (groupID !== undefined) {
-    (extraFields as PartialCSLEntry).groupID = groupID;
+    extraFields.groupID = groupID;
   }
 
   const creators = data.creators as Record<string, unknown>[] | undefined;
@@ -260,5 +260,5 @@ export function zoteroItemToCsl(
     extraFields.abstract = data.abstractNote;
   }
 
-  return extraFields as PartialCSLEntry;
+  return extraFields;
 }

@@ -8,12 +8,14 @@
     "inlineSources": true,
     "isolatedModules": true,
     "jsx": "react",
-    "lib": ["dom", "es6", "scripthost", "es2018"],
+    "lib": ["dom", "dom.iterable", "scripthost", "es2021"],
     "module": "ESNext",
     "moduleResolution": "node",
     "noImplicitAny": true,
     "skipLibCheck": true,
-    "target": "es2018"
+    "target": "es2018",
+    "types": []
   },
-  "include": ["./src/**/*.ts", "./src/**/*.tsx"]
+  "include": ["./src/**/*.ts", "./src/**/*.tsx"],
+  "exclude": ["./src/**/tests/**", "./src/**/*.test.ts"]
 }

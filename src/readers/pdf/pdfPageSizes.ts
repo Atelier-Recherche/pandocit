@@ -19,6 +19,6 @@ export async function loadPdfPageSizes(
     const vp = page.getViewport({ scale: 1 });
     pageSizes.set(pageIndex, { width: vp.width, height: vp.height });
   }
-  await doc.destroy();
+  await loading.destroy();
   return pageSizes;
 }

@@ -1,14 +1,19 @@
 /** Exemples documentés pour les réglages d’import PDF → Zotero. */
 
-export const EXAMPLE_EXCLUDE_FOLDER_GLOBS = [
-  'Archives/**',
-  '**/.trash/**',
-  '**/_attachments/**',
-  '**/drafts/**',
-  '**/brouillons/**',
-  '**/.obsidian/**',
-  '**/node_modules/**',
-];
+import type { TranslationKey } from '../lang/helpers';
+
+/** `configDir` : `app.vault.configDir` (pas forcément `.obsidian`). */
+export function exampleExcludeFolderGlobs(configDir: string): string[] {
+  return [
+    'Archives/**',
+    '**/.trash/**',
+    '**/_attachments/**',
+    '**/drafts/**',
+    '**/brouillons/**',
+    `**/${configDir}/**`,
+    '**/node_modules/**',
+  ];
+}
 
 export const EXAMPLE_EXCLUDE_PATH_REGEX =
   '.*/(Archives|drafts|brouillons|\\.trash)(/|$)';
@@ -21,8 +26,8 @@ export const EXAMPLE_METADATA_REGEX_COMMA =
 
 export interface FilterExampleGroup {
   id: string;
-  labelKey: string;
-  introKey?: string;
+  labelKey: TranslationKey;
+  introKey?: TranslationKey;
   sampleNames?: string[];
   value: string;
 }

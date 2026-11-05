@@ -2,7 +2,7 @@
 
 <table>
 <tr>
-<td><img src="readme-media/logo_pandocite.jpg" alt="PandoCit" width="140" /></td>
+<td><img src="readme-media/logo_pandocit.png" alt="PandoCit" width="140" /></td>
 <td align="left">
 <h1 style="margin:0">PandoCit</h1>
 <p style="margin:0.25em 0 0"><strong>Pandoc citations in Obsidian</strong><br/>sidebar panel · WASM bibliography · Zotero integration</p>
@@ -184,6 +184,32 @@ Install **`pandoc.wasm`** from plugin settings in the vault (required for non-JS
 ## ⚠️ Known limitations (WASM)
 
 Pandoc WASM runs in a sandbox: no arbitrary network or shell commands. This plugin only uses bibliography → CSL JSON conversion.
+
+## Obsidian review — disclosures
+
+Automated checks may flag access that is **required** for desktop features:
+
+| Flag | Reason |
+| --- | --- |
+| Filesystem (`fs`) | Linked Zotero attachments, bibliographies / CSL cache outside the vault |
+| Clipboard | Copying citations and annotation references |
+| Vault enumeration | Resolving PDF/EPUB files and fuzzy paths |
+| Node modules (`fs` / `path` / `crypto`) and `electron` | Only behind `Platform.isDesktop` (files outside the vault, MD5 hash for Zotero uploads, file picker, HTML clipboard) |
+
+The plugin also targets mobile for reading and API sync; Node code paths stay desktop-only.
+
+### Network use
+
+Plugin requests go through Obsidian’s `requestUrl`; only pdf.js loads its own assets from unpkg. No telemetry, no ads.
+
+| Service | When |
+| --- | --- |
+| `127.0.0.1:23119` (Better BibTeX, local) | When the Zotero / Better BibTeX bibliography source is enabled |
+| `api.zotero.org` | When a Zotero API key is configured (library read/write, attachments) |
+| `raw.githubusercontent.com` (CSL styles and locales) | On first use of a citation style or language that is not cached |
+| `github.com` (pandoc.wasm, EPUB reader) | Only when clicking an install button in settings |
+| `unpkg.com` (pdf.js standard fonts, WASM, ICC profiles) | When opening a PDF in the built-in reader (the worker is bundled; separate download only on click) |
+| `hypothes.is` | Only when Hypothesis import is used |
 
 ## 🔗 Resources
 

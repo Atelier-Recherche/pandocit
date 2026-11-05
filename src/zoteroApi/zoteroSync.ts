@@ -264,7 +264,7 @@ export class ZoteroSyncService {
    * Utilise la vue fusionnée si l’item n’est pas dans le fichier biblio cible.
    */
   private async resolveStoredItemForWrite(itemKey: string): Promise<{
-    route: ReturnType<ZoteroSync['getWriteRoute']>;
+    route: ReturnType<ZoteroSyncService['getWriteRoute']>;
     snap: ZoteroStoreSnapshot;
     item: StoredZoteroItem;
   } | null> {
@@ -464,7 +464,7 @@ export class ZoteroSyncService {
       return { ok: false, error: detail };
     }
 
-    const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
+    const envelopes = parseItemArray(res.text);
     let env = envelopes[0];
     if (
       !env?.data &&
@@ -474,7 +474,7 @@ export class ZoteroSyncService {
         `${route.prefix}/items/${apiKey}?format=json&includeTrashed=1`
       );
       if (getRes.status === 200 && getRes.text) {
-        const again = parseItemArray(getRes.text) as ZoteroApiItemEnvelope[];
+        const again = parseItemArray(getRes.text);
         env = again[0];
       }
     }
@@ -1145,7 +1145,7 @@ export class ZoteroSyncService {
       `${prefix}/items/${itemKeyPlain}?format=json&includeTrashed=1`
     );
     if (res.status !== 200) return false;
-    const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
+    const envelopes = parseItemArray(res.text);
     const env = envelopes[0];
     if (!env?.data) return false;
     const snap = await this.store.load(fileId);
@@ -1306,7 +1306,7 @@ export class ZoteroSyncService {
 
         if (res.status >= 200 && res.status < 300) {
           uploaded++;
-          const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
+          const envelopes = parseItemArray(res.text);
           const env = envelopes[0];
           if (env?.version != null) {
             snap.items[key] = {
@@ -1418,7 +1418,7 @@ export class ZoteroSyncService {
         )}&format=json&includeTrashed=1`;
         const res = await this.client.request(path);
         if (res.status !== 200) continue;
-        const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
+        const envelopes = parseItemArray(res.text);
         for (const env of envelopes) {
           applyRemoteEnvelope(snap, env);
           roundDl++;
@@ -1542,7 +1542,7 @@ export class ZoteroSyncService {
       )}&format=json&includeTrashed=1`;
       const res = await this.client.request(path);
       if (res.status !== 200) continue;
-      const envelopes = parseItemArray(res.text) as ZoteroApiItemEnvelope[];
+      const envelopes = parseItemArray(res.text);
       for (const env of envelopes) {
         applyRemoteEnvelope(snap, env);
         downloaded++;

@@ -60,7 +60,7 @@ export async function runVaultPdfImport(
       );
       let fileBytes: Uint8Array | undefined;
       if (opts.attachmentMode === 'upload') {
-        fileBytes = await plugin.app.vault.readBinary(row.file);
+        fileBytes = new Uint8Array(await plugin.app.vault.readBinary(row.file));
       }
 
       const itemType =
@@ -100,7 +100,7 @@ export async function runVaultPdfImport(
   if (result.created > 0) {
     await plugin.zoteroSync.sync();
     plugin.bibManager.fileCache.clear();
-    plugin.processReferences();
+    void plugin.processReferences();
   }
 
   return result;

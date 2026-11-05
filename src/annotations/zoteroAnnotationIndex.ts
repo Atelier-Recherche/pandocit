@@ -31,7 +31,7 @@ export function resolveTopItemInfo(
     seen.add(key);
     const st = snap.items[key];
     if (!st) break;
-    const d = st.data as Record<string, unknown>;
+    const d = st.data;
     if (!citekey) {
       citekey = displayCitekeyForLibrary(d, st.key);
     }
@@ -52,7 +52,7 @@ export function buildAnnotationRowsFromSnapshot(
   const rows: ZoteroAnnotationRow[] = [];
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType) !== 'annotation') continue;
-    const d = st.data as Record<string, unknown>;
+    const d = st.data;
     // Corbeille Zotero : encore dans le cache tant que non purgé, mais à ignorer.
     if (d.deleted === 1 || d.deleted === true) continue;
     const parentKey = String(d.parentItem ?? '');

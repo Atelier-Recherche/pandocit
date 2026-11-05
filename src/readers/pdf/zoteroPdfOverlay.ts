@@ -4,6 +4,7 @@ import {
   copyAnnotationReferenceNotice,
   formatDocumentAnnotationReference,
 } from '../../annotations/annotationReference';
+import { getActiveLeaf } from '../../helpers';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import {
@@ -35,7 +36,7 @@ interface ActivePdfTarget {
 
 /** Conteneur + chemin du PDF natif focusé (jamais le shell ni un autre panneau). */
 function findActivePdfTarget(plugin: ReferenceList): ActivePdfTarget | null {
-  const active = plugin.app.workspace.activeLeaf;
+  const active = getActiveLeaf(plugin.app);
   if (active?.view.getViewType() === 'pdf') {
     const vf = (active.view as { file?: TFile }).file;
     if (vf instanceof TFile && vf.extension.toLowerCase() === 'pdf') {

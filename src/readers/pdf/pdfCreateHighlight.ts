@@ -1,5 +1,6 @@
 import { Modal, Notice, Setting, TFile } from 'obsidian';
 
+import { toArrayBuffer } from '../../helpers';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import type { PdfHighlight, PdfRect } from './pdfAnnotationBridge';
@@ -83,7 +84,6 @@ class PdfCommentModal extends Modal {
       .addSlider((sl) => {
         sl.setLimits(10, 90, 5)
           .setValue(Math.round((1 - this.opacity) * 100))
-          .setDynamicTooltip()
           .onChange((v) => {
             this.opacity = 1 - v / 100;
           });
@@ -235,7 +235,7 @@ function getPageElForRect(rect: DOMRect): HTMLElement | null {
   const x = rect.left + Math.max(1, rect.width / 2);
   const y = rect.top + Math.max(1, rect.height / 2);
   const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  return el?.closest('[data-page-number]') as HTMLElement | null;
+  return el?.closest<HTMLElement>('[data-page-number]') ?? null;
 }
 
 function toPdfHighlightRect(
@@ -288,7 +288,7 @@ function collectSelectionByPage(
       if (!pageSize) continue;
       const rect = toPdfHighlightRect(r, pageEl, pageSize.width, pageSize.height);
       if (!byPage.has(pageIndex)) byPage.set(pageIndex, []);
-      byPage.get(pageIndex)!.push(rect);
+      byPage.get(pageIndex).push(rect);
     }
   }
   return byPage.size ? byPage : null;
@@ -321,7 +321,7 @@ async function applyPdfHighlight(
     if (opts.target !== 'zotero') {
       const bytes = await plugin.app.vault.readBinary(file);
       const saved = await embedHighlightsInPdf(new Uint8Array(bytes), highlights);
-      await plugin.app.vault.modifyBinary(file, saved);
+      await plugin.app.vault.modifyBinary(file, toArrayBuffer(saved));
     }
 
     const wantsZotero = opts.target !== 'pdf';

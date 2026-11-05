@@ -1,5 +1,6 @@
 import { TFile, type PaneType, type WorkspaceLeaf } from 'obsidian';
 
+import { getActiveLeaf } from '../helpers';
 import type ReferenceList from '../main';
 import { pdfReaderViewType } from './pdf/PdfReaderView';
 import { epubReaderViewType } from './epub/EpubReaderView';
@@ -67,7 +68,7 @@ export async function openInPandocitReader(
         opts?.newLeaf === true ? 'tab' : opts.newLeaf
       );
     } else {
-      leaf = plugin.app.workspace.activeLeaf;
+      leaf = getActiveLeaf(plugin.app);
     }
   }
   if (!leaf) {
@@ -86,7 +87,7 @@ export async function openInPandocitReader(
         zoteroAttachmentKey: opts?.zoteroAttachmentKey,
       },
     });
-    plugin.app.workspace.revealLeaf(leaf);
+    void plugin.app.workspace.revealLeaf(leaf);
   } finally {
     plugin.skipFileOpenRoute = false;
   }
@@ -152,7 +153,7 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
 
       const viewType =
         kind === 'pdf' ? pdfReaderViewType : epubReaderViewType;
-      const leaf = plugin.app.workspace.activeLeaf;
+      const leaf = getActiveLeaf(plugin.app);
       if (!leaf || leaf.view.getViewType() === viewType) return;
 
       schedulePandocitReaderSwap(plugin, file);
@@ -166,7 +167,7 @@ export function registerDocumentOpenRouter(plugin: ReferenceList): void {
  * Obsidian peut renvoyer un autre PDF/EPUB ouvert et le panneau bascule à tort.
  */
 function syncActiveReaderFromWorkspace(_plugin: ReferenceList): void {
-  const leaf = _plugin.app.workspace.activeLeaf;
+  const leaf = getActiveLeaf(_plugin.app);
   if (!leaf) return;
 
   const viewType = leaf.view.getViewType();

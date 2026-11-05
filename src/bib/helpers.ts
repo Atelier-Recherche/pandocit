@@ -4,14 +4,7 @@ import { Platform, requestUrl } from 'obsidian';
 import { CSLList, PartialCSLEntry } from './types';
 import { pandocConvertToCslJson } from '../pandocWasm';
 import { getVaultRoot } from '../helpers';
-import {
-  getDownload,
-  getFs,
-  getHttp,
-  getHttps,
-  getPath,
-  isDesktop,
-} from '../platformAdapter';
+import { getFs, getPath, isDesktop } from '../platformAdapter';
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
@@ -91,7 +84,7 @@ export async function bibToCSL(
   const parsed = path.parse(resolvedPath);
   if (parsed.ext === '.json') {
     const contents = await readBibliographyFile(resolvedPath, app);
-    return JSON.parse(contents);
+    return JSON.parse(contents) as PartialCSLEntry[];
   }
 
   const contents = await readBibliographyFile(resolvedPath, app);
@@ -99,7 +92,7 @@ export async function bibToCSL(
 
   const stdout = await pandocConvertToCslJson(virtualName, contents);
 
-  return JSON.parse(stdout);
+  return JSON.parse(stdout) as PartialCSLEntry[];
 }
 
 async function fetchUrl(url: string): Promise<string> {
@@ -133,20 +126,7 @@ export async function getCSLLocale(
     }
   }
 
-  const str = isDesktop() && getHttps()
-    ? await new Promise<string>((res, rej) => {
-        getHttps().get(url, (result: any) => {
-          let output = '';
-          result.setEncoding('utf8');
-          result.on('data', (chunk: string) => (output += chunk));
-          result.on('error', (e: Error) => rej(`Downloading locale: ${e}`));
-          result.on('end', () => {
-            if (/^404: Not Found/.test(output)) rej(new Error('Error downloading locale: 404'));
-            else res(output);
-          });
-        });
-      })
-    : await fetchUrl(url);
+  const str = await fetchUrl(url);
 
   if (isDesktop()) {
     fs.writeFileSync(outpath, str);
@@ -213,17 +193,7 @@ export async function getCSLStyle(
     }
   }
 
-  const str = isDesktop() && getHttps()
-    ? await new Promise<string>((res, rej) => {
-        getHttps().get(url, (result: any) => {
-          let output = '';
-          result.setEncoding('utf8');
-          result.on('data', (chunk: string) => (output += chunk));
-          result.on('error', (e: Error) => rej(`Error downloading CSL: ${e}`));
-          result.on('end', () => res(output));
-        });
-      })
-    : await fetchUrl(url);
+  const str = await fetchUrl(url);
 
   if (isDesktop()) {
     fs.writeFileSync(outpath, str);
@@ -236,12 +206,26 @@ export const defaultHeaders = {
   'Content-Type': 'application/json',
   'User-Agent': 'obsidian/zotero',
   Accept: 'application/json',
-  Connection: 'keep-alive',
 };
 
-function getGlobal() {
-  if ((window as any).activeWindow) return (window as any).activeWindow;
-  return window;
+type JsonRpcResponse<T> = {
+  result?: T;
+  error?: { message?: string };
+};
+
+/** Requête JSON-RPC Better BibTeX (`/better-bibtex/json-rpc`, desktop). */
+async function zoteroJsonRpc<T>(
+  port: string,
+  payload: { method: string; params?: unknown[] }
+): Promise<JsonRpcResponse<T>> {
+  const res = await requestUrl({
+    url: `http://127.0.0.1:${port}/better-bibtex/json-rpc`,
+    method: 'POST',
+    headers: defaultHeaders,
+    body: JSON.stringify({ jsonrpc: '2.0', ...payload }),
+    throw: false,
+  });
+  return JSON.parse(res.text) as JsonRpcResponse<T>;
 }
 
 export async function getZUserGroups(
@@ -250,43 +234,10 @@ export async function getZUserGroups(
   if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const http = getHttp();
-  if (!http) return null;
-  const request = http.request;
-  return new Promise((res, rej) => {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'user.groups',
-    });
-
-    const postRequest = request(
-      {
-        host: '127.0.0.1',
-        port: port,
-        path: '/better-bibtex/json-rpc',
-        method: 'POST',
-        headers: {
-          ...defaultHeaders,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (result: any) => {
-        let output = '';
-        result.setEncoding('utf8');
-        result.on('data', (chunk: string) => (output += chunk));
-        result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('end', () => {
-          try {
-            res(JSON.parse(output).result);
-          } catch (e) {
-            rej(e);
-          }
-        });
-      }
-    );
-    postRequest.write(body);
-    postRequest.end();
+  const res = await zoteroJsonRpc<Array<{ id: number; name: string }>>(port, {
+    method: 'user.groups',
   });
+  return res.result;
 }
 
 function panNum(n: number) {
@@ -311,44 +262,11 @@ export async function getZModified(
   if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const http = getHttp();
-  if (!http) return null;
-  const request = http.request;
-  return new Promise((res, rej) => {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'item.search',
-      params: [[['dateModified', 'isAfter', timestampToZDate(since)]], groupId],
-    });
-
-    const postRequest = request(
-      {
-        host: '127.0.0.1',
-        port: port,
-        path: '/better-bibtex/json-rpc',
-        method: 'POST',
-        headers: {
-          ...defaultHeaders,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (result: any) => {
-        let output = '';
-        result.setEncoding('utf8');
-        result.on('data', (chunk: string) => (output += chunk));
-        result.on('error', (e: Error) => rej(`Error connecting to Zotero: ${e}`));
-        result.on('end', () => {
-          try {
-            res(JSON.parse(output).result);
-          } catch (e) {
-            rej(e);
-          }
-        });
-      }
-    );
-    postRequest.write(body);
-    postRequest.end();
+  const res = await zoteroJsonRpc<CSLList>(port, {
+    method: 'item.search',
+    params: [[['dateModified', 'isAfter', timestampToZDate(since)]], groupId],
   });
+  return res.result;
 }
 
 function applyGroupID(list: CSLList, groupId: number) {
@@ -384,12 +302,10 @@ export async function getZBib(
     }
   }
 
-  const download = getDownload();
-  if (!download) return null;
-  const bib = await download(
-    `http://127.0.0.1:${port}/better-bibtex/export/library?/${groupId}/library.json`
-  );
-  const str = bib.toString();
+  const bib = await requestUrl({
+    url: `http://127.0.0.1:${port}/better-bibtex/export/library?/${groupId}/library.json`,
+  });
+  const str = bib.text;
 
   fs.writeFileSync(cached, str);
 
@@ -411,14 +327,18 @@ export async function refreshZBib(
   ensureDir(cacheDir);
   if (!fs.existsSync(cached)) return null;
 
-  const mList = (await getZModified(port, groupId, since)) as CSLList;
+  const mList = (await getZModified(port, groupId, since));
   if (!mList?.length) return null;
 
   const modified: Map<string, PartialCSLEntry> = new Map();
   const newKeys: Set<string> = new Set();
 
   for (const mod of mList) {
-    mod.id = (mod as any).citekey || (mod as any)['citation-key'];
+    const keyed = mod as PartialCSLEntry & {
+      citekey?: string;
+      'citation-key'?: string;
+    };
+    mod.id = keyed.citekey || keyed['citation-key'];
     if (!mod.id) continue;
     modified.set(mod.id, mod);
     newKeys.add(mod.id);
@@ -449,20 +369,25 @@ export async function refreshZBib(
 export async function isZoteroRunning(port: string = DEFAULT_ZOTERO_PORT) {
   if (!Platform.isDesktop) return false;
 
-  const download = getDownload();
-  if (!download) return false;
-  const p = download(`http://127.0.0.1:${port}/better-bibtex/cayw?probe=true`);
+  const probe = (async (): Promise<string | null> => {
+    try {
+      const r = await requestUrl({
+        url: `http://127.0.0.1:${port}/better-bibtex/cayw?probe=true`,
+      });
+      return r.text;
+    } catch {
+      return null;
+    }
+  })();
+  const timer = typeof activeWindow !== 'undefined' ? activeWindow : window;
   const res = await Promise.race([
-    p,
-    new Promise((resolve) => {
-      getGlobal().setTimeout(() => {
-        resolve(null);
-        p.destroy?.();
-      }, 150);
+    probe,
+    new Promise<null>((resolve) => {
+      timer.setTimeout(() => resolve(null), 150);
     }),
   ]);
 
-  return res?.toString() === 'ready';
+  return res === 'ready';
 }
 
 export async function getItemJSONFromCiteKeys(
@@ -473,60 +398,11 @@ export async function getItemJSONFromCiteKeys(
   if (!Platform.isDesktop) return null;
   if (!(await isZoteroRunning(port))) return null;
 
-  const http = getHttp();
-  if (!http) return null;
-  const request = http.request;
-  let res: {
-    error?: { message?: string };
-    result?: string;
-  };
+  let res: JsonRpcResponse<string | string[]>;
   try {
-    res = await new Promise((resolve, rej) => {
-      const body = JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'item.export',
-        params: [citeKeys, '36a3b0b5-bad0-4a04-b79b-441c7cef77db', libraryID],
-      });
-
-      const postRequest = request(
-        {
-          host: '127.0.0.1',
-          port: port,
-          path: '/better-bibtex/json-rpc',
-          method: 'POST',
-          headers: {
-            ...defaultHeaders,
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (result: {
-          setEncoding: (enc: string) => void;
-          on: (ev: string, cb: (...args: unknown[]) => void) => void;
-        }) => {
-          let output = '';
-          result.setEncoding('utf8');
-          result.on('data', (chunk: unknown) => {
-            output += String(chunk);
-          });
-          result.on('error', (e: unknown) =>
-            rej(
-              e instanceof Error
-                ? e
-                : new Error(`Error connecting to Zotero: ${String(e)}`)
-            )
-          );
-          result.on('end', () => {
-            try {
-              resolve(JSON.parse(output));
-            } catch (e) {
-              rej(e instanceof Error ? e : new Error(String(e)));
-            }
-          });
-        }
-      );
-
-      postRequest.write(body);
-      postRequest.end();
+    res = await zoteroJsonRpc<string | string[]>(port, {
+      method: 'item.export',
+      params: [citeKeys, '36a3b0b5-bad0-4a04-b79b-441c7cef77db', libraryID],
     });
   } catch (e) {
     console.error(e);
@@ -539,9 +415,8 @@ export async function getItemJSONFromCiteKeys(
       return null;
     }
 
-    return Array.isArray(res.result)
-      ? JSON.parse(res.result[2]).items
-      : JSON.parse(res.result).items;
+    const raw = Array.isArray(res.result) ? res.result[2] : res.result;
+    return (JSON.parse(raw) as { items: unknown[] }).items;
   } catch (e) {
     console.error(e);
     return null;

@@ -1,9 +1,10 @@
 /** Champs Zotero Web API (bloc `data`) éditables en plus du cœur titre/date/publication */
 
+import type { TranslationKey } from '../lang/helpers';
+
 export type ZoteroExtraFieldDef = {
   key: string;
-  /** Clé passée à t() dans en.ts */
-  labelKey: string;
+  labelKey: TranslationKey;
   multiline?: boolean;
 };
 

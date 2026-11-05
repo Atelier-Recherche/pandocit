@@ -137,8 +137,6 @@ class EpubHighlightModal extends Modal {
 
           .setValue(Math.round((1 - this.opacity) * 100))
 
-          .setDynamicTooltip()
-
           .onChange((v) => {
 
             this.opacity = 1 - v / 100;

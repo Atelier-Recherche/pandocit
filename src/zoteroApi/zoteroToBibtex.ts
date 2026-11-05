@@ -266,7 +266,7 @@ export function generateBibtexFromSnapshot(snap: ZoteroStoreSnapshot): string {
   });
 
   for (const it of items) {
-    const data = it.data as Record<string, unknown>;
+    const data = it.data;
     if (!shouldIncludeInBibExport(data)) continue;
 
     const bibType = entryTypeForItem(String(data.itemType ?? 'misc'));
@@ -285,7 +285,7 @@ export function generateBibtexFromSnapshot(snap: ZoteroStoreSnapshot): string {
 export function countBibExportEntries(snap: ZoteroStoreSnapshot): number {
   let n = 0;
   for (const it of Object.values(snap.items)) {
-    if (shouldIncludeInBibExport(it.data as Record<string, unknown>)) n++;
+    if (shouldIncludeInBibExport(it.data)) n++;
   }
   return n;
 }

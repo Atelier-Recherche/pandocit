@@ -396,7 +396,7 @@ export function openVaultPdfImportModal(plugin: ReferenceList): void {
   }
   const modal = new VaultPdfImportModal(plugin, () => {
     void plugin.bibManager.loadGlobalZoteroApi();
-    plugin.shell?.zoteroPanel?.refreshList?.();
+    void plugin.shell?.zoteroPanel?.refreshList?.();
   });
   modal.open();
 }

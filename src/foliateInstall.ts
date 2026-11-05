@@ -4,7 +4,7 @@ import type ReferenceList from './main';
 import { t } from './lang/helpers';
 import { getPluginFolder } from './pandocWasmInstall';
 
-/** @deprecated Lecteur EPUB bundlé dans main.js ; conservé pour compatibilité chemins legacy. */
+/** Lecteur EPUB bundlé dans main.js ; nom conservé pour les chemins d’installation legacy. */
 export const FOLIATE_VIEW_FILENAME = 'foliate-view.mjs';
 
 export const FOLIATE_VIEW_DOWNLOAD_URL =

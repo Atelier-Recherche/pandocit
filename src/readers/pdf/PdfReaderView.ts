@@ -1,6 +1,6 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import type { ViewStateResult } from 'obsidian';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import { readerRegistry } from '../readerRegistry';
@@ -11,12 +11,12 @@ import { refreshPdfPanelAnnotations } from './pdfPanelAnnotations';
 
 export const pdfReaderViewType = 'pwc-pdf-reader-view';
 
-interface PdfReaderState {
+type PdfReaderState = {
   path?: string;
   file?: string;
   page?: number;
   zoteroAnnotationKey?: string;
-}
+};
 
 export class PdfReaderView extends ItemView {
   plugin: ReferenceList;
@@ -30,7 +30,8 @@ export class PdfReaderView extends ItemView {
   private zoteroAttachmentKey: string | undefined;
   private currentPage = 1;
   private totalPages = 1;
-  private pdfDoc: Awaited<ReturnType<ReturnType<typeof pdfjsLib.getDocument>['promise']['then']>> | null = null;
+  /** pdf.js 6 : la libération passe par la tâche de chargement. */
+  private pdfLoadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: ReferenceList) {
     super(leaf);
@@ -60,7 +61,10 @@ export class PdfReaderView extends ItemView {
     await this.loadFromStateOrActiveFile();
   }
 
-  async setState(state: PdfReaderState, result: unknown): Promise<void> {
+  async setState(
+    state: PdfReaderState,
+    result: ViewStateResult
+  ): Promise<void> {
     await super.setState(state, result);
     await this.loadFromStateOrActiveFile(state);
   }
@@ -191,9 +195,9 @@ export class PdfReaderView extends ItemView {
     this.iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
     this.iframe.setAttribute('referrerpolicy', 'no-referrer');
 
-    if (this.pdfDoc) {
-      await this.pdfDoc.destroy();
-      this.pdfDoc = null;
+    if (this.pdfLoadingTask) {
+      await this.pdfLoadingTask.destroy();
+      this.pdfLoadingTask = null;
     }
     try {
       const bytes = await this.app.vault.readBinary(this.file);
@@ -208,8 +212,8 @@ export class PdfReaderView extends ItemView {
       );
 
       const loading = pdfjsLib.getDocument(pdfGetDocumentInit(this.plugin, bytes));
+      this.pdfLoadingTask = loading;
       const doc = await loading.promise;
-      this.pdfDoc = doc;
       this.totalPages = doc.numPages;
       this.updatePageUi();
     } catch (e) {
@@ -347,9 +351,9 @@ export class PdfReaderView extends ItemView {
 
   async onClose(): Promise<void> {
     if (this.file?.path) readerRegistry.remove(this.file.path);
-    if (this.pdfDoc) {
-      await this.pdfDoc.destroy();
-      this.pdfDoc = null;
+    if (this.pdfLoadingTask) {
+      await this.pdfLoadingTask.destroy();
+      this.pdfLoadingTask = null;
     }
     if (this.pdfBlobUrl) {
       URL.revokeObjectURL(this.pdfBlobUrl);

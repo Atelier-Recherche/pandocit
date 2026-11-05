@@ -53,7 +53,7 @@ function newState(): State {
     encounteredKey: false,
     shouldCancelSeek: false,
     segment: [] as Segment[],
-    currentSegment: null as Segment,
+    currentSegment: null,
   };
 }
 

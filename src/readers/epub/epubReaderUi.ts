@@ -1,3 +1,4 @@
+import { getActiveLeaf } from '../../helpers';
 import type ReferenceList from '../../main';
 import { epubReaderViewType } from './EpubReaderView';
 import type { EpubReaderView } from './EpubReaderView';
@@ -5,7 +6,7 @@ import type { EpubReaderView } from './EpubReaderView';
 export function getActiveEpubReaderForPlugin(
   plugin: ReferenceList
 ): EpubReaderView | null {
-  const leaf = plugin.app.workspace.activeLeaf;
+  const leaf = getActiveLeaf(plugin.app);
   if (!leaf || leaf.view.getViewType() !== epubReaderViewType) return null;
   return leaf.view as EpubReaderView;
 }

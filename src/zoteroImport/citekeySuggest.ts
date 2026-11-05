@@ -99,7 +99,7 @@ export function suggestCitekey(
   existing?: string
 ): string {
   if (isUsableExplicitCitekey(existing, author, title)) {
-    return existing!.trim();
+    return existing.trim();
   }
 
   const year = new Date(fileMtimeMs).getFullYear();

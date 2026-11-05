@@ -3,6 +3,7 @@ import { Notice, TFile } from 'obsidian';
 import { t } from '../lang/helpers';
 import { resolveVaultRelativePdfPath } from '../helpers';
 import type ReferenceList from '../main';
+import { writeElectronClipboard } from '../platformAdapter';
 import { getLinkedFilePathFromAttachmentData } from '../zoteroApi/attachmentLinks';
 import { parseStorageItemKey } from '../zoteroApi/zoteroMerge';
 import type { ZoteroStoreSnapshot } from '../zoteroApi/types';
@@ -99,13 +100,11 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    const ta = createEl('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    ta.remove();
-    return ok;
+    try {
+      return writeElectronClipboard({ text });
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -133,7 +132,7 @@ export async function resolveVaultPathForZoteroAttachment(
   const snap = await plugin.zoteroSync.loadSnapshot();
   const st = snap.items[attachmentKey];
   if (!st) return undefined;
-  const d = st.data as Record<string, unknown>;
+  const d = st.data;
   const linked = getLinkedFilePathFromAttachmentData(d);
   if (linked) {
     const vault = resolveVaultRelativePdfPath(plugin.app, linked);

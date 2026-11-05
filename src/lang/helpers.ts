@@ -68,7 +68,9 @@ export function getPluginUiLocale(): string {
   return pluginUiLocale;
 }
 
-export function t(str: keyof typeof en): string {
+export type TranslationKey = keyof typeof en;
+
+export function t(str: TranslationKey): string {
   const locale = localeMap[pluginUiLocale];
   return (locale && locale[str]) || en[str];
 }

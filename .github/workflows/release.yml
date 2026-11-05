@@ -47,6 +47,9 @@ jobs:
           fi
           node -e "const v=require('esbuild/package.json').version; if(v!=='0.25.12'){console.error('esbuild inattendu:',v); process.exit(1)}"
 
+      - name: Type check
+        run: yarn check-types
+
       - name: Build plugin
         run: |
           set -euo pipefail

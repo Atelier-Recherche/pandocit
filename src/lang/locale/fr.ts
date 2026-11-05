@@ -626,5 +626,16 @@ export default {
   'Reader dark mode': 'Mode sombre des lecteurs',
   'Toggle annotation restyle': 'Activer/désactiver le restyle des annotations',
   'Toggle reader dark mode': 'Activer/désactiver le mode sombre du lecteur',
+  'Annotation has no position data': 'L’annotation n’a pas de position',
+  'No Zotero attachment match for this PDF':
+    'Aucune pièce jointe Zotero ne correspond à ce PDF',
+  'Highlight saved to PDF': 'Surlignage enregistré dans le PDF',
+  'Failed to save PDF highlight': 'Échec de l’enregistrement du surlignage PDF',
+  'Open a PDF first': 'Ouvrez d’abord un PDF',
+  'Select text in the PDF first': 'Sélectionnez d’abord du texte dans le PDF',
+  'No PDF text selection detected': 'Aucune sélection de texte PDF détectée',
+  'Official PDF.js viewer mode': 'Mode lecteur PDF.js officiel',
+  'Open a PDF or EPUB to see annotations here.':
+    'Ouvrez un PDF ou un EPUB pour voir ses annotations ici.',
 };
 

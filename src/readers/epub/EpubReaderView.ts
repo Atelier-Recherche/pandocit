@@ -1,4 +1,5 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf, debounce, setIcon } from 'obsidian';
+import type { ViewStateResult } from 'obsidian';
 
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
@@ -29,12 +30,12 @@ import { zoteroAnnotationsForEpubAttachment } from './zoteroEpubAnnotations';
 
 export const epubReaderViewType = 'pwc-epub-reader-view';
 
-interface EpubReaderState {
+type EpubReaderState = {
   path?: string;
   file?: string;
   zoteroAttachmentKey?: string;
   gotoCfi?: string;
-}
+};
 
 type FoliateAnnotation = { value: string; color?: string };
 
@@ -45,12 +46,17 @@ type FoliateTocItem = {
   subitems?: FoliateTocItem[];
 };
 
+type FoliatePageListItem = {
+  label?: string;
+  href?: string;
+};
+
 type FoliateLocation = {
   fraction?: number;
   section?: { current?: number; total?: number };
   location?: { current?: number; next?: number; total?: number };
   tocItem?: FoliateTocItem | null;
-  pageItem?: { label?: string } | null;
+  pageItem?: FoliatePageListItem | null;
 };
 
 type FoliateViewEl = HTMLElement & {
@@ -68,7 +74,7 @@ type FoliateViewEl = HTMLElement & {
   book?: {
     toc?: FoliateTocItem[];
     sections?: unknown[];
-    pageList?: unknown[];
+    pageList?: FoliatePageListItem[];
   };
   lastLocation?: FoliateLocation | null;
   renderer?: HTMLElement & {
@@ -77,6 +83,18 @@ type FoliateViewEl = HTMLElement & {
     shadowRoot?: ShadowRoot | null;
   };
 };
+
+/** Total pages papier : max des labels numériques, sinon longueur de la page-list. */
+function paperTotalFromPageList(pageList: FoliatePageListItem[]): number {
+  let maxLabel = 0;
+  for (const item of pageList) {
+    const label = item.label?.trim();
+    if (label && /^\d+$/.test(label)) {
+      maxLabel = Math.max(maxLabel, parseInt(label, 10));
+    }
+  }
+  return Math.max(1, maxLabel > 0 ? maxLabel : pageList.length);
+}
 
 export class EpubReaderView extends ItemView {
   plugin: ReferenceList;
@@ -94,6 +112,8 @@ export class EpubReaderView extends ItemView {
   private tocOpen = false;
   private currentPage = 1;
   private totalPages = 1;
+  /** true si book.pageList est non vide (numéros papier NAV/NCX). */
+  private usesPaperPages = false;
   private currentTocHref: string | undefined;
   private foliateEl: FoliateViewEl | null = null;
   private pendingGotoCfi: string | undefined;
@@ -129,7 +149,7 @@ export class EpubReaderView extends ItemView {
       cls: 'pwc-epub-reader__toc-list',
     });
     this.host = this.bodyEl.createDiv({ cls: 'pwc-epub-reader__host' });
-    this.saveDebounced = debounce(() => void this.persistSidecar(), 800, true);
+    this.saveDebounced = debounce((): void => void this.persistSidecar(), 800, true);
     this.buildRail();
     this.buildToolbar();
     this.syncTocPanelVisibility();
@@ -242,7 +262,7 @@ export class EpubReaderView extends ItemView {
         // Recharger depuis le snapshot Zotero (pas seulement le registry en mémoire).
         if (this.file) {
           void import('./epubReaderRefresh').then(({ refreshEpubReaderAnnotations }) =>
-            refreshEpubReaderAnnotations(this.plugin, this.file!.path)
+            refreshEpubReaderAnnotations(this.plugin, this.file.path)
           );
         }
       })
@@ -250,7 +270,10 @@ export class EpubReaderView extends ItemView {
     await this.loadFromStateOrActiveFile();
   }
 
-  async setState(state: EpubReaderState, result: unknown): Promise<void> {
+  async setState(
+    state: EpubReaderState,
+    result: ViewStateResult
+  ): Promise<void> {
     await super.setState(state, result);
     const path = vaultPathFromViewState(state);
     const goto = state?.gotoCfi?.trim();
@@ -438,11 +461,22 @@ export class EpubReaderView extends ItemView {
     addBtn('refresh-cw', t('Resync document annotations'), () => {
       if (!this.file) return;
       void import('./epubReaderRefresh').then(({ refreshEpubReaderAnnotations }) =>
-        refreshEpubReaderAnnotations(this.plugin, this.file!.path, {
+        refreshEpubReaderAnnotations(this.plugin, this.file.path, {
           syncRemote: true,
         })
       );
     });
+  }
+
+  private initPaperPagesFromBook(view: FoliateViewEl): void {
+    const pageList = view.book?.pageList;
+    if (pageList && pageList.length > 0) {
+      this.usesPaperPages = true;
+      this.totalPages = paperTotalFromPageList(pageList);
+      this.currentPage = 1;
+    } else {
+      this.usesPaperPages = false;
+    }
   }
 
   private async goToPageFromInput(): Promise<void> {
@@ -452,6 +486,20 @@ export class EpubReaderView extends ItemView {
     if (!Number.isFinite(raw)) return;
     const page = Math.min(this.totalPages, Math.max(1, Math.floor(raw)));
     this.pageInputEl.value = String(page);
+
+    if (this.usesPaperPages) {
+      const pageList = view.book?.pageList ?? [];
+      const label = String(page);
+      const entry = pageList.find((item) => item.label?.trim() === label);
+      if (!entry?.href || !view.goTo) return;
+      try {
+        await view.goTo(entry.href);
+      } catch (e) {
+        console.warn('[PandoCit EPUB] goTo paper page', e);
+      }
+      return;
+    }
+
     if (view.goToFraction && this.totalPages > 1) {
       const frac = (page - 1) / this.totalPages;
       try {
@@ -473,24 +521,33 @@ export class EpubReaderView extends ItemView {
   private updatePageUi(loc?: FoliateLocation | null): void {
     const location = loc ?? this.foliateEl?.lastLocation ?? null;
     const pageLabel = location?.pageItem?.label?.trim();
-    if (pageLabel && /^\d+$/.test(pageLabel)) {
-      this.currentPage = Math.max(1, parseInt(pageLabel, 10));
-    } else if (location?.location?.current != null) {
-      this.currentPage = Math.max(1, (location.location.current ?? 0) + 1);
-      this.totalPages = Math.max(
-        1,
-        location.location.total ?? this.totalPages
-      );
-    } else if (location?.section?.current != null) {
-      this.currentPage = Math.max(1, (location.section.current ?? 0) + 1);
-      this.totalPages = Math.max(
-        1,
-        location.section.total ?? this.totalPages
-      );
+
+    if (this.usesPaperPages) {
+      if (pageLabel && /^\d+$/.test(pageLabel)) {
+        this.currentPage = Math.max(1, parseInt(pageLabel, 10));
+      }
+      // Sans pageItem : garder currentPage ; ne jamais écraser avec location.total.
+    } else {
+      if (pageLabel && /^\d+$/.test(pageLabel)) {
+        this.currentPage = Math.max(1, parseInt(pageLabel, 10));
+      } else if (location?.location?.current != null) {
+        this.currentPage = Math.max(1, (location.location.current ?? 0) + 1);
+        this.totalPages = Math.max(
+          1,
+          location.location.total ?? this.totalPages
+        );
+      } else if (location?.section?.current != null) {
+        this.currentPage = Math.max(1, (location.section.current ?? 0) + 1);
+        this.totalPages = Math.max(
+          1,
+          location.section.total ?? this.totalPages
+        );
+      }
+      if (location?.location?.total != null) {
+        this.totalPages = Math.max(1, location.location.total);
+      }
     }
-    if (location?.location?.total != null) {
-      this.totalPages = Math.max(1, location.location.total);
-    }
+
     if (this.pageInputEl && document.activeElement !== this.pageInputEl) {
       this.pageInputEl.value = String(this.currentPage);
       this.pageInputEl.max = String(this.totalPages);
@@ -575,7 +632,7 @@ export class EpubReaderView extends ItemView {
       }
       if (!cfi?.startsWith('epubcfi(') || seen.has(cfi)) continue;
       seen.add(cfi);
-      const style = (a.markupStyle ?? 'highlight') as PdfHighlightStyle;
+      const style = (a.markupStyle ?? 'highlight');
       this.annotationStyles.set(cfi, style);
       this.annotationOpacity.set(cfi, a.opacity ?? 0.35);
       this.foliateCfiToAnnId.set(cfi, a.id);
@@ -700,9 +757,8 @@ export class EpubReaderView extends ItemView {
     const view = this.foliateEl;
     if (!view?.addAnnotation) return;
     const payloads = this.foliateAnnotationPayloads();
-    const next = new Set(payloads.map((p) => p.value));
 
-    // Toujours retirer tous les CFI déjà posés (même s’ils restent dans next) :
+    // Toujours retirer tous les CFI déjà posés (même s’ils restent dans payloads) :
     // sinon un CFI recalculé ou un create-overlay laisse des fantômes.
     const toRemove = [...this.appliedFoliateCfis];
     for (const old of toRemove) {
@@ -718,12 +774,10 @@ export class EpubReaderView extends ItemView {
     }
     this.appliedFoliateCfis.clear();
 
-    let ok = 0;
     for (const a of payloads) {
       try {
         await view.addAnnotation(a);
         this.appliedFoliateCfis.add(a.value);
-        ok++;
       } catch (e) {
         console.warn('[PandoCit EPUB] addAnnotation', a.value.slice(0, 64), e);
       }
@@ -827,14 +881,7 @@ export class EpubReaderView extends ItemView {
     const wantShift = e.shiftKey;
     const wantAlt = e.altKey;
 
-    const hm = this.app.hotkeyManager as {
-      getHotkeys?: (
-        id: string
-      ) => Array<{ modifiers: string[]; key: string }> | undefined;
-      getDefaultHotkeys?: (
-        id: string
-      ) => Array<{ modifiers: string[]; key: string }> | undefined;
-    };
+    const hm = this.app.hotkeyManager;
 
     if (!hm?.getHotkeys) {
       if (wantMod && !wantShift && !wantAlt && key === 'p') {
@@ -901,6 +948,9 @@ export class EpubReaderView extends ItemView {
 
     this.foliateEl?.close?.();
     this.foliateEl = null;
+    this.usesPaperPages = false;
+    this.currentPage = 1;
+    this.totalPages = 1;
     this.appliedFoliateCfis.clear();
     this.resolvedFoliateCfiByAnnId.clear();
 
@@ -920,9 +970,9 @@ export class EpubReaderView extends ItemView {
       if (gen !== this.loadGeneration) return;
 
       this.host.empty();
-      const el = document.createElement('foliate-view') as FoliateViewEl;
-      el.classList.add('pwc-epub-reader__view');
-      this.host.appendChild(el);
+      const el = this.host.createEl('foliate-view', {
+        cls: 'pwc-epub-reader__view',
+      }) as FoliateViewEl;
       this.foliateEl = el;
 
       this.wireFoliateAnnotationRendering(el);
@@ -933,6 +983,7 @@ export class EpubReaderView extends ItemView {
       }
       await el.open(fileObj);
       if (gen !== this.loadGeneration) return;
+      this.initPaperPagesFromBook(el);
       if (typeof el.init === 'function') await el.init({ showTextStart: true });
       this.rebuildToc();
       this.updatePageUi(el.lastLocation);

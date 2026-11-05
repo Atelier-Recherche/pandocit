@@ -6,7 +6,7 @@ export interface VaultPdfImportRow {
   file: TFile;
   vaultPath: string;
   /** Extension lowercase sans point (`pdf`, `epub`). */
-  kind: 'pdf' | 'epub' | string;
+  kind: string;
   pageCount: number;
   title: string;
   author: string;

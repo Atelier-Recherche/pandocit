@@ -353,4 +353,15 @@ export default {
   'One line per merged group: numeric ID and display name (or ID=name). Shown in the library panel and collections; overrides names from Load groups when set.':
     'Eine Zeile pro Gruppe: numerische ID und Anzeigename oder ID=Name. Im Bibliotheksbereich und bei Sammlungen; überschreibt Namen aus „Gruppen laden“.',
   'Could not open file': 'Datei konnte nicht geöffnet werden',
+  'Annotation has no position data': 'Die Annotation hat keine Positionsdaten',
+  'No Zotero attachment match for this PDF':
+    'Kein passender Zotero-Anhang für dieses PDF',
+  'Highlight saved to PDF': 'Hervorhebung im PDF gespeichert',
+  'Failed to save PDF highlight': 'PDF-Hervorhebung konnte nicht gespeichert werden',
+  'Open a PDF first': 'Öffnen Sie zuerst ein PDF',
+  'Select text in the PDF first': 'Markieren Sie zuerst Text im PDF',
+  'No PDF text selection detected': 'Keine Textauswahl im PDF erkannt',
+  'Official PDF.js viewer mode': 'Offizieller PDF.js-Viewer-Modus',
+  'Open a PDF or EPUB to see annotations here.':
+    'Öffnen Sie ein PDF oder EPUB, um hier die Annotationen zu sehen.',
 };

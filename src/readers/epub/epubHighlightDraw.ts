@@ -2,6 +2,7 @@
 export type EpubOverlayRect = {
   left: number;
   top: number;
+  bottom: number;
   height: number;
   width: number;
 };

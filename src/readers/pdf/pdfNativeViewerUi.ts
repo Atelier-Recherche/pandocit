@@ -1,6 +1,7 @@
 import { Menu, Notice, TFile, debounce, setIcon } from 'obsidian';
 
 import { copyTextToClipboard } from '../../annotations/annotationReference';
+import { getActiveLeaf } from '../../helpers';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import { createPdfHighlightFromSelection } from './pdfCreateHighlight';
@@ -21,7 +22,7 @@ const TOC_BTN_CLASS = 'pwc-reader-toc-btn';
 
 /** Affiche la sidebar PDF Obsidian et active la vue outline (TOC). */
 function showPdfOutlineSidebar(container: HTMLElement): void {
-  const sidebar = container.querySelector('.pdf-sidebar') as HTMLElement | null;
+  const sidebar = container.querySelector<HTMLElement>('.pdf-sidebar');
   const sidebarHidden =
     !sidebar ||
     sidebar.classList.contains('is-hidden') ||
@@ -76,14 +77,14 @@ function showPdfOutlineSidebar(container: HTMLElement): void {
 }
 
 function isObsidianNativePdfActive(plugin: ReferenceList): boolean {
-  const leaf = plugin.app.workspace.activeLeaf;
+  const leaf = getActiveLeaf(plugin.app);
   if (!leaf || leaf.view.getViewType() !== 'pdf') return false;
   const file = (leaf.view as { file?: TFile }).file;
   return file instanceof TFile && file.extension.toLowerCase() === 'pdf';
 }
 
 function activePdfContainer(plugin: ReferenceList): HTMLElement | null {
-  const leaf = plugin.app.workspace.activeLeaf;
+  const leaf = getActiveLeaf(plugin.app);
   if (!leaf || leaf.view.getViewType() !== 'pdf') return null;
   return leaf.view.containerEl ?? null;
 }
@@ -178,13 +179,11 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
       hl.setAttribute('aria-label', title);
       (hl as HTMLButtonElement).title = title;
     }
-    const restyle = existingGroup.querySelector(
+    const restyle = existingGroup.querySelector<HTMLElement>(
       `.${RESTYLE_BTN_CLASS}`
-    ) as HTMLElement | null;
+    );
     restyle?.toggleClass('is-active', restyleOn);
-    const dark = existingGroup.querySelector(
-      `.${DARK_BTN_CLASS}`
-    ) as HTMLElement | null;
+    const dark = existingGroup.querySelector<HTMLElement>(`.${DARK_BTN_CLASS}`);
     if (dark) {
       dark.toggleClass('is-active', darkOn);
       setIcon(dark, darkOn ? 'sun' : 'moon');
@@ -235,7 +234,7 @@ function injectPdfHighlightToolbarButton(plugin: ReferenceList): void {
       t('Resync document annotations'),
       RESYNC_BTN_CLASS,
       () => {
-        const leaf = plugin.app.workspace.activeLeaf;
+        const leaf = getActiveLeaf(plugin.app);
         const file = (leaf?.view as { file?: TFile } | undefined)?.file;
         if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'pdf') {
           return;

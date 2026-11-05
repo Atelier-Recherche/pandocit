@@ -3,7 +3,6 @@
  * On vendore uniquement la classe EpubCFI + un shim core (~45 Ko),
  * sans le reader epub.js complet.
  */
-// @ts-expect-error vendored CJS/ESM hybrid without types
 import EpubCFI from './vendor/epubcfi.js';
 
 import { shortenEpubCfi, stripEpubCfiIdAssertions } from './epubCfiBridge';

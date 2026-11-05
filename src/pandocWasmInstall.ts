@@ -1,6 +1,7 @@
 import { Notice, normalizePath, requestUrl } from 'obsidian';
 import { unzipSync } from 'fflate';
 
+import { toArrayBuffer } from './helpers';
 import type ReferenceList from './main';
 import { t } from './lang/helpers';
 
@@ -83,13 +84,7 @@ export async function downloadAndInstallPandocWasm(
 
     await ensureParentDirs(plugin, wasmPath);
 
-    const wasmBytes = extracted[wasmKey];
-    const buf = wasmBytes.buffer.slice(
-      wasmBytes.byteOffset,
-      wasmBytes.byteOffset + wasmBytes.byteLength
-    );
-
-    await adapter.writeBinary(wasmPath, buf);
+    await adapter.writeBinary(wasmPath, toArrayBuffer(extracted[wasmKey]));
 
     new Notice(t('Pandoc WASM installed. Reload Obsidian to apply.'));
     return true;

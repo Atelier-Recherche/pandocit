@@ -5,6 +5,7 @@ import {
   PDFName,
   PDFNumber,
 } from 'pdf-lib';
+import type { PDFObject, PDFPage } from 'pdf-lib';
 
 import type { PdfHighlight, PdfRect } from './pdfAnnotationBridge';
 import { decodePdfField } from './pdfLibField';
@@ -35,7 +36,7 @@ function toPdfLibRect(
 
 function appendHighlightAnnotation(
   doc: PDFDocument,
-  page: any,
+  page: PDFPage,
   pdfRects: { x: number; y: number; width: number; height: number }[],
   color: { r: number; g: number; b: number },
   text: string,
@@ -111,7 +112,7 @@ export async function embedHighlightsInPdf(
   const byPage = new Map<number, PdfHighlight[]>();
   for (const h of highlights) {
     if (!byPage.has(h.pageIndex)) byPage.set(h.pageIndex, []);
-    byPage.get(h.pageIndex)!.push(h);
+    byPage.get(h.pageIndex).push(h);
   }
 
   for (const [pageIndex, list] of byPage) {
@@ -180,7 +181,7 @@ function filterAnnotsOnPage(
   }
   if (!removeKeys.size) return false;
 
-  const keep: unknown[] = [];
+  const keep: PDFObject[] = [];
   for (let i = 0; i < annots.size(); i++) {
     const ref = annots.get(i);
     if (removeKeys.has(refKey(ref))) continue;

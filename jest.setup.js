@@ -1,5 +1,7 @@
 /** Polyfills pour jsdom / WASI (pandoc.wasm). */
 const { TextEncoder, TextDecoder } = require('util');
+/** Electron expose `require` sur le global du renderer (cf. `desktopRequire`). */
+globalThis.require = require;
 if (typeof global.TextEncoder === 'undefined') {
   global.TextEncoder = TextEncoder;
 }

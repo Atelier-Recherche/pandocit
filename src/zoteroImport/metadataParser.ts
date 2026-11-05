@@ -37,7 +37,9 @@ export function parsePdfMetadataFromPath(
     const pick = (name?: string, idx?: number) => {
       if (name) {
         if (m.groups?.[name]) return String(m.groups[name]).trim();
-        if (m[name]) return String(m[name]).trim();
+        if (/^\d+$/.test(name) && m[Number(name)]) {
+          return String(m[Number(name)]).trim();
+        }
         return '';
       }
       if (idx !== undefined) return String(m[idx] ?? '').trim();

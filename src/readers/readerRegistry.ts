@@ -45,7 +45,7 @@ export class ReaderRegistry {
     if (!this.byPath.has(vaultPath)) return;
     this.byPath.delete(vaultPath);
     if (this.activePath === vaultPath) {
-      const next = this.byPath.keys().next();
+      const next = this.byPath.keys().next() as IteratorResult<string, undefined>;
       this.activePath = next.done ? null : next.value;
     }
     this.notify();

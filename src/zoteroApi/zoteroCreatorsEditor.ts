@@ -44,7 +44,7 @@ export function mountZoteroCreatorsEditor(
   t: (k: string) => string
 ): CreatorsEditorMount {
   const box = host.createDiv({ cls: 'pwc-zotero-creators' });
-  box.createEl('div', {
+  box.createDiv({
     cls: 'pwc-zotero-creators-heading',
     text: t('Creators'),
   });

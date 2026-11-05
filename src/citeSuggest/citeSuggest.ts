@@ -22,24 +22,22 @@ export class CiteSuggest extends EditorSuggest<
   Fuse.FuseResult<PartialCSLEntry> | Loading
 > {
   private plugin: ReferenceList;
-  private app: App;
 
   limit: number = 20;
 
   constructor(app: App, plugin: ReferenceList) {
     super(app);
 
-    this.app = app;
     this.plugin = plugin;
 
-    (this as any).suggestEl.addClass('pwc-suggest');
-    (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
-      (this as any).suggestions.useSelectedItem(evt);
+    this.suggestEl.addClass('pwc-suggest');
+    this.scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
+      this.suggestions.useSelectedItem(evt);
       return false;
     });
 
-    (this as any).scope.register(['Alt'], 'Enter', (evt: KeyboardEvent) => {
-      (this as any).suggestions.useSelectedItem(evt);
+    this.scope.register(['Alt'], 'Enter', (evt: KeyboardEvent) => {
+      this.suggestions.useSelectedItem(evt);
       return false;
     });
 

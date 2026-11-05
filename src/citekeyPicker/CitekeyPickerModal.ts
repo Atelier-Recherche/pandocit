@@ -127,7 +127,7 @@ export class CitekeyPickerModal extends Modal {
       this.results = all.slice(0, EMPTY_PREVIEW).map((item, i) => ({
         item,
         refIndex: i,
-      })) as Fuse.FuseResult<PartialCSLEntry>[];
+      }));
     } else {
       const deduped = dedupeBibliographyEntries(
         (bibManager.fuse.search(q, { limit: RESULT_LIMIT * 2 }) ?? []).map(
@@ -137,7 +137,7 @@ export class CitekeyPickerModal extends Modal {
       this.results = deduped.slice(0, RESULT_LIMIT).map((item, i) => ({
         item,
         refIndex: i,
-      })) as Fuse.FuseResult<PartialCSLEntry>[];
+      }));
     }
 
     this.selectedIndex = 0;

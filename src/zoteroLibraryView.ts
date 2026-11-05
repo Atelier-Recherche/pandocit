@@ -28,7 +28,7 @@ import {
   parseStorageItemKey,
   zoteroUriForStorageKey,
 } from './zoteroApi/zoteroMerge';
-import { getPath, isDesktop } from './platformAdapter';
+import { getPath, isDesktop, showOpenFileDialog } from './platformAdapter';
 import { itemTypeBadgeLabel } from './zoteroItemTypeBadge';
 import {
   copyAnnotationReferenceNotice,
@@ -44,7 +44,7 @@ import {
   isBibliographyFileRow,
 } from './library/libraryBibRows';
 
-/** @deprecated Legacy view type — migrated to shell */
+/** Ancien type de vue — feuilles migrées vers le shell. */
 export const zoteroLibraryViewType = 'pwc-zotero-library-view';
 
 type RowFlat = {
@@ -185,7 +185,7 @@ export class ZoteroLibraryPanel {
       attr: { type: 'button', 'aria-label': t('Sync now'), title: t('Sync now') },
     });
     setIcon(this.syncBtn, 'refresh-ccw');
-    this.syncBtn.addEventListener('click', async () => {
+    this.syncBtn.addEventListener('click', () => void (async () => {
       this.syncBtn.disabled = true;
       try {
         const { noticeSyncResult } = await import('./zoteroApi/zoteroSync');
@@ -194,7 +194,7 @@ export class ZoteroLibraryPanel {
         await this.plugin.zoteroAnnotationIndex.refresh(this.plugin);
         await this.plugin.bibManager.loadGlobalZoteroApi();
         this.plugin.bibManager.fileCache.clear();
-        this.plugin.processReferences();
+        void this.plugin.processReferences();
         await this.refreshList();
         this.plugin.emitter.trigger('pwc-zotero-synced');
         const { refreshEpubReaderAnnotations } = await import(
@@ -204,7 +204,7 @@ export class ZoteroLibraryPanel {
       } finally {
         this.syncBtn.disabled = false;
       }
-    });
+    })());
 
     this.importPdfBtn = headActions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__head-btn',
@@ -228,7 +228,7 @@ export class ZoteroLibraryPanel {
       },
     });
     setIcon(this.bibExportBtn, 'book-marked');
-    this.bibExportBtn.addEventListener('click', async () => {
+    this.bibExportBtn.addEventListener('click', () => void (async () => {
       const p = this.plugin.settings.zoteroApiBibExportPath?.trim();
       if (!p) {
         new Notice(t('Set the BibTeX path in Zotero Web API settings'));
@@ -250,7 +250,7 @@ export class ZoteroLibraryPanel {
       } else {
         new Notice(`${t('Export failed')}: ${res.error ?? ''}`);
       }
-    });
+    })());
 
     this.reloadBibBtn = headActions.createEl('button', {
       cls: 'clickable-icon pwc-zotero-library__head-btn',
@@ -261,7 +261,7 @@ export class ZoteroLibraryPanel {
       },
     });
     setIcon(this.reloadBibBtn, 'book-open');
-    this.reloadBibBtn.addEventListener('click', async () => {
+    this.reloadBibBtn.addEventListener('click', () => void (async () => {
       this.reloadBibBtn.disabled = true;
       try {
         const bibPath = this.plugin.settings.pathToBibliography?.trim();
@@ -276,13 +276,13 @@ export class ZoteroLibraryPanel {
           await this.plugin.bibManager.loadGlobalBibFile();
         }
         this.plugin.bibManager.fileCache.clear();
-        this.plugin.processReferences();
+        void this.plugin.processReferences();
         await this.refreshList();
         new Notice(t('Bibliography reloaded'));
       } finally {
         this.reloadBibBtn.disabled = false;
       }
-    });
+    })());
 
     this.listEl = this.rootEl.createDiv({
       cls: 'pwc-zotero-library__list pwc-zotero-library__list--tree',
@@ -291,7 +291,7 @@ export class ZoteroLibraryPanel {
   }
 
   private makeRow(st: StoredZoteroItem): RowFlat {
-    const d = st.data as Record<string, unknown>;
+    const d = st.data;
     return {
       key: st.key,
       stored: st,
@@ -314,14 +314,14 @@ export class ZoteroLibraryPanel {
       const pid = st.data.parentItem;
       if (typeof pid === 'string') {
         if (!byParent.has(pid)) byParent.set(pid, []);
-        byParent.get(pid)!.push(st);
+        byParent.get(pid).push(st);
       }
     }
     for (const st of trashedItems) {
       const pid = st.data.parentItem;
       if (typeof pid === 'string') {
         if (!byParentTrash.has(pid)) byParentTrash.set(pid, []);
-        byParentTrash.get(pid)!.push(st);
+        byParentTrash.get(pid).push(st);
       }
     }
     for (const [pid, list] of byParent) {
@@ -356,7 +356,7 @@ export class ZoteroLibraryPanel {
       const pid = st.data.parentItem;
       if (typeof pid === 'string') {
         if (!byParent.has(pid)) byParent.set(pid, []);
-        byParent.get(pid)!.push(st);
+        byParent.get(pid).push(st);
       }
     }
 
@@ -377,7 +377,7 @@ export class ZoteroLibraryPanel {
       const pid = st.data.parentItem;
       if (typeof pid === 'string') {
         if (!byParentTrash.has(pid)) byParentTrash.set(pid, []);
-        byParentTrash.get(pid)!.push(st);
+        byParentTrash.get(pid).push(st);
       }
     }
     const trashRoots = trashedItems.filter((st) => {
@@ -405,14 +405,14 @@ export class ZoteroLibraryPanel {
       }
       const ck = cols[0];
       if (!byColl.has(ck)) byColl.set(ck, []);
-      byColl.get(ck)!.push(st);
+      byColl.get(ck).push(st);
     }
 
     const sortSt = (a: StoredZoteroItem, b: StoredZoteroItem) =>
       rowTitle(a).localeCompare(rowTitle(b));
 
     const buildTreeNode = (st: StoredZoteroItem): ItemTreeNode => {
-      const d = st.data as Record<string, unknown>;
+      const d = st.data;
       const kidsRaw = (byParent.get(st.key) ?? []).sort(sortSt);
       const inlineAttachments = kidsRaw.filter(
         (k) => String(k.data.itemType) === 'attachment'
@@ -434,7 +434,7 @@ export class ZoteroLibraryPanel {
       arr.sort(sortSt).map(buildTreeNode);
 
     const buildTrashTreeNode = (st: StoredZoteroItem): ItemTreeNode => {
-      const d = st.data as Record<string, unknown>;
+      const d = st.data;
       const kidsRaw = (byParentTrash.get(st.key) ?? []).sort(sortSt);
       const inlineAttachments = kidsRaw.filter(
         (k) => String(k.data.itemType) === 'attachment'
@@ -550,7 +550,7 @@ export class ZoteroLibraryPanel {
 
     this.flatRows.push(...bibRows);
 
-    const children: ItemTreeNode[] = bibRows.map((row) => ({
+    const children: ItemTreeNode[] = bibRows.map((row): ItemTreeNode => ({
       stored: row.stored,
       citekey: row.citekey,
       title: row.title,
@@ -763,9 +763,7 @@ export class ZoteroLibraryPanel {
     const sentinel = host.createDiv({
       cls: 'pwc-zotero-library__load-sentinel',
     });
-    const scrollRoot = host.closest(
-      '.pwc-zotero-library__list'
-    ) as HTMLElement | null;
+    const scrollRoot = host.closest<HTMLElement>('.pwc-zotero-library__list');
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
@@ -958,7 +956,7 @@ export class ZoteroLibraryPanel {
       new Notice(t('Attachment not found for annotation'));
       return;
     }
-    const d = parent.data as Record<string, unknown>;
+    const d = parent.data;
     const path =
       (typeof d.path === 'string' && d.path) ||
       (typeof d.url === 'string' && d.url) ||
@@ -973,7 +971,7 @@ export class ZoteroLibraryPanel {
     const lower = path.toLowerCase();
     const gotoCfi = lower.endsWith('.epub')
       ? String(
-          (snap.items[row.key]?.data as Record<string, unknown> | undefined)
+          (snap.items[row.key]?.data)
             ?.annotationPosition ?? ''
         ) || undefined
       : undefined;
@@ -1349,7 +1347,7 @@ export class ZoteroLibraryPanel {
       await this.refreshList();
       await this.plugin.bibManager.loadGlobalZoteroApi();
       this.plugin.bibManager.fileCache.clear();
-      this.plugin.processReferences();
+      void this.plugin.processReferences();
     };
 
     editBtn.addEventListener('click', () => {
@@ -1392,7 +1390,7 @@ export class ZoteroLibraryPanel {
         text: t('Use server copy'),
       });
       takeRemote.addClass('mod-warning');
-      takeRemote.addEventListener('click', async () => {
+      takeRemote.addEventListener('click', () => void (async () => {
         const ok = await this.plugin.zoteroSync.fetchAndOverwriteItem(
           stored.key
         );
@@ -1401,9 +1399,9 @@ export class ZoteroLibraryPanel {
           await this.refreshList();
           await this.plugin.bibManager.loadGlobalZoteroApi();
           this.plugin.bibManager.fileCache.clear();
-          this.plugin.processReferences();
+          void this.plugin.processReferences();
         }
-      });
+      })());
     }
 
     if (citekey) {
@@ -1557,7 +1555,7 @@ class ZoteroItemEditModal extends Modal {
 
     const citeKeyIn = textField(t('Citation key (Better BibTeX)'), 'citationKey');
     citeKeyIn.value = resolveCitationKey(
-      data as Record<string, unknown>,
+      data,
       this.item.key
     );
     const titleIn = textField(t('Title'), 'title');
@@ -1569,7 +1567,7 @@ class ZoteroItemEditModal extends Modal {
     const creatorsMount = mountZoteroCreatorsEditor(
       creatorsHost,
       data.creators,
-      t as (k: string) => string
+      t
     );
 
     const usePublisher = ITEM_TYPES_WITH_PUBLISHER.has(itemType);
@@ -1692,7 +1690,7 @@ class ZoteroItemEditModal extends Modal {
       resolveVaultPdfAbsolutePath(this.plugin.app, input);
 
     const wrap = contentEl.createDiv({ cls: 'pwc-zotero-attachments' });
-    wrap.createEl('div', {
+    wrap.createDiv({
       cls: 'setting-item-heading',
       text: t('Attachments'),
     });
@@ -1725,7 +1723,7 @@ class ZoteroItemEditModal extends Modal {
         const row = listHost.createDiv({
           cls: 'pwc-zotero-attachment-row',
         });
-        const d = att.data as Record<string, unknown>;
+        const d = att.data;
         const lm = String(d.linkMode ?? '');
         const isLinkedUrl = lm === 'linked_url';
         const isLinkedFile = lm === 'linked_file';
@@ -1735,7 +1733,7 @@ class ZoteroItemEditModal extends Modal {
         else if (isLinkedFile) modeLabel = t('Local file');
         else modeLabel = lm || 'attachment';
 
-        row.createEl('div', {
+        row.createDiv({
           cls: 'setting-item-name',
           text: modeLabel,
         });
@@ -1841,7 +1839,7 @@ class ZoteroItemEditModal extends Modal {
     };
 
     const addWeb = wrap.createDiv({ cls: 'pwc-zotero-attachments-add' });
-    addWeb.createEl('div', {
+    addWeb.createDiv({
       cls: 'setting-item-name',
       text: t('New web link'),
     });
@@ -1889,7 +1887,7 @@ class ZoteroItemEditModal extends Modal {
       });
 
     const addFile = wrap.createDiv({ cls: 'pwc-zotero-attachments-add' });
-    addFile.createEl('div', {
+    addFile.createDiv({
       cls: 'setting-item-name',
       text: t('New linked file'),
     });
@@ -1929,11 +1927,9 @@ class ZoteroItemEditModal extends Modal {
         );
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
-      const picked = require('electron').remote.dialog.showOpenDialogSync({
-        defaultPath: getVaultRoot(this.plugin.app) || undefined,
-        properties: ['openFile'],
-      });
+      const picked = showOpenFileDialog(
+        getVaultRoot(this.plugin.app) || undefined
+      );
       if (picked?.length) filePathIn.value = picked[0];
     });
     const fileBtns = addFile.createDiv({

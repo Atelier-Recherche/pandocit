@@ -1,5 +1,5 @@
-import { EditorView } from '@codemirror/view';
 import CSL from 'citeproc';
+import type { CiteprocEngine } from 'citeproc';
 import ReferenceList from 'src/main';
 import { PartialCSLEntry } from './types';
 import Fuse from 'fuse.js';
@@ -67,7 +67,7 @@ export interface FileCache {
   source: {
     bibCache?: Map<string, PartialCSLEntry>;
     fuse?: Fuse<PartialCSLEntry>;
-    engine?: any;
+    engine?: CiteprocEngine;
   };
 }
 
@@ -84,15 +84,14 @@ function getScopedSettings(
 
   const { frontmatter } = metadata;
 
-  output.bibliography = frontmatter.bibliography?.trim() || undefined;
+  const fmString = (v: unknown): string | undefined =>
+    typeof v === 'string' ? v.trim() || undefined : undefined;
+
+  output.bibliography = fmString(frontmatter.bibliography);
   output.style =
-    frontmatter.csl?.trim() ||
-    frontmatter['citation-style']?.trim() ||
-    undefined;
+    fmString(frontmatter.csl) ?? fmString(frontmatter['citation-style']);
   output.lang =
-    frontmatter.lang?.trim() ||
-    frontmatter['citation-language']?.trim() ||
-    undefined;
+    fmString(frontmatter.lang) ?? fmString(frontmatter['citation-language']);
 
   if (Object.values(output).every((v) => !v)) {
     return null;
@@ -156,7 +155,7 @@ export class BibManager {
   /** Clé API Zotero (8 car.) → id CSL / citekey (ne pas indexer dans bibCache). */
   citekeyAliases: Map<string, string> = new Map();
   fuse: Fuse<PartialCSLEntry>;
-  engine: any;
+  engine: CiteprocEngine | null;
 
   zCitekeyToLinks: Map<string, string> = new Map();
   zCitekeyToPDFLinks: Map<string, string[]> = new Map();
@@ -485,9 +484,9 @@ export class BibManager {
             if (evt === 'change') {
               window.clearTimeout(dbTimer);
               dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
-                this.loadGlobalBibFile().then(() => {
+                void this.loadGlobalBibFile().then(() => {
                   this.fileCache.clear();
-                  this.plugin.processReferences();
+                  void this.plugin.processReferences();
                 });
               }, 100);
             } else {
@@ -574,7 +573,7 @@ export class BibManager {
     }
 
     for (const st of Object.values(snap.items)) {
-      const d = st.data as Record<string, unknown>;
+      const d = st.data;
       if (String(d.itemType ?? '') !== 'attachment') continue;
       const parentKey =
         typeof d.parentItem === 'string' ? d.parentItem.trim() : '';
@@ -676,7 +675,7 @@ export class BibManager {
       }
     }
 
-    this.plugin.saveSettings();
+    void this.plugin.saveSettings();
 
     this.bibCache = new Map();
     for (const entry of bib) {
@@ -742,10 +741,10 @@ export class BibManager {
       }
     }
 
-    this.plugin.saveSettings();
+    void this.plugin.saveSettings();
     this.updateFuse(modifiedEntries);
     this.fileCache.clear();
-    this.plugin.processReferences();
+    void this.plugin.processReferences();
   }
 
   buildEngine(
@@ -754,7 +753,7 @@ export class BibManager {
     style: string,
     styleCache: Map<string, string>,
     bibCache: Map<string, PartialCSLEntry>
-  ) {
+  ): CiteprocEngine {
     const styleXML = styleCache.get(style);
     if (!styleXML) {
       throw new Error(
@@ -950,7 +949,7 @@ export class BibManager {
               window.clearTimeout(dbTimer);
               dbTimer = (typeof activeWindow !== 'undefined' ? activeWindow : window).setTimeout(() => {
                 this.fileCache.delete(file);
-                this.plugin.processReferences();
+                void this.plugin.processReferences();
               }, 100);
             } else {
               this.clearWatcher(bibPath);
@@ -1027,7 +1026,7 @@ export class BibManager {
       return cachedDoc.bib;
     }
 
-    let bib: ReturnType<typeof source.engine.makeBibliography>;
+    let bib: ReturnType<CiteprocEngine['makeBibliography']>;
     try {
       bib = source.engine.makeBibliography();
     } catch (e) {
@@ -1035,7 +1034,7 @@ export class BibManager {
       return setNull();
     }
 
-    if (!bib?.length) {
+    if (!bib || !bib.length) {
       return setNull();
     }
 
@@ -1043,7 +1042,7 @@ export class BibManager {
     const entries = bib[1];
     const htmlStr = [metadata.bibstart];
 
-    metadata.entry_ids?.forEach((e: string, i: number) => {
+    metadata.entry_ids?.forEach((e, i) => {
       entries[i] = entries[i].replace(/>/, ` data-citekey="${e[0]}">`);
       citeBibMap.set(e[0], entries[i]);
     });
@@ -1128,7 +1127,7 @@ export class BibManager {
               div.setAttr('aria-label', t('Open literature note'));
               div.onClickEvent((e) => {
                 const newPane = Keymap.isModEvent(e);
-                this.plugin.app.workspace.openLinkText(
+                void this.plugin.app.workspace.openLinkText(
                   linkText,
                   file.path,
                   newPane
@@ -1184,7 +1183,7 @@ export class BibManager {
     this.plugin.app.workspace.getLeavesOfType('markdown').forEach((l) => {
       const view = l.view as MarkdownView;
       if (view.file === file) {
-        const renderer = (view.previewMode as any).renderer;
+        const renderer = view.previewMode.renderer;
         if (renderer) {
           renderer.lastText = null;
           for (const section of renderer.sections) {
@@ -1199,8 +1198,8 @@ export class BibManager {
           renderer.queueRender();
         }
 
-        const cm = (view.editor as any).cm as EditorView;
-        if (cm.dispatch) {
+        const cm = view.editor.cm;
+        if (cm?.dispatch) {
           cm.dispatch({
             effects: [setCiteKeyCache.of(result)],
           });

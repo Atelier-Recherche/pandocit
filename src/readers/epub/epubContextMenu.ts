@@ -54,8 +54,9 @@ function annotationFromEventTarget(
   view: EpubReaderView,
   target: EventTarget | null
 ): DocumentAnnotation | undefined {
-  if (!target?.instanceOf(Element)) return undefined;
-  let el: Element | null = target;
+  const node = target as Node | null;
+  if (node?.nodeType !== Node.ELEMENT_NODE) return undefined;
+  let el: Element | null = node as Element;
   while (el && !el.getAttribute?.(PWC_ANN_CFI_ATTR)) {
     el = el.parentElement;
   }

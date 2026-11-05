@@ -137,7 +137,7 @@ export async function findZoteroAttachmentKeyForVaultFile(
 
   for (const st of Object.values(snap.items)) {
     if (String(st.data.itemType) !== 'attachment') continue;
-    const d = st.data as Record<string, unknown>;
+    const d = st.data;
     const extOk = attachmentMatchesFileExt(d, fileExt);
 
     const linked = getLinkedFilePathFromAttachmentData(d);

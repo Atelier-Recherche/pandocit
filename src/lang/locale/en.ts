@@ -611,5 +611,16 @@ export default {
   'Reader dark mode': 'Reader dark mode',
   'Toggle annotation restyle': 'Toggle annotation restyle',
   'Toggle reader dark mode': 'Toggle reader dark mode',
+  'Annotation has no position data': 'Annotation has no position data',
+  'No Zotero attachment match for this PDF':
+    'No Zotero attachment match for this PDF',
+  'Highlight saved to PDF': 'Highlight saved to PDF',
+  'Failed to save PDF highlight': 'Failed to save PDF highlight',
+  'Open a PDF first': 'Open a PDF first',
+  'Select text in the PDF first': 'Select text in the PDF first',
+  'No PDF text selection detected': 'No PDF text selection detected',
+  'Official PDF.js viewer mode': 'Official PDF.js viewer mode',
+  'Open a PDF or EPUB to see annotations here.':
+    'Open a PDF or EPUB to see annotations here.',
 };
 

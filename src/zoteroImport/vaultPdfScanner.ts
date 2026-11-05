@@ -70,7 +70,7 @@ export async function scanVaultFolderForPdfImport(
       let pageCount = 0;
       if (kind === 'pdf') {
         const bytes = await plugin.app.vault.readBinary(file);
-        pageCount = await countPdfPages(plugin, bytes);
+        pageCount = await countPdfPages(plugin, new Uint8Array(bytes));
       }
       const meta = parsePdfMetadataFromPath(file.path, rules.metadataRegex);
       const existingKey = plugin.settings.pullFromZoteroApi

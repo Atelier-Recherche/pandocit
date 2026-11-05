@@ -63,7 +63,7 @@ async function loadWasmBytes(): Promise<ArrayBuffer> {
 async function instantiateWasm(): Promise<WebAssembly.Instance> {
   const bytes = await loadWasmBytes();
   const res = await WebAssembly.instantiate(bytes, {
-    wasi_snapshot_preview1: wasi!.wasiImport,
+    wasi_snapshot_preview1: wasi.wasiImport,
   });
   return res.instance;
 }
@@ -95,7 +95,7 @@ async function initPandoc(): Promise<void> {
     console.error('Failed to load pandoc.wasm', e);
     throw new Error('pandoc.wasm initialization failed');
   }
-  wasi!.initialize(instance as unknown as WasiInitInstance);
+  wasi.initialize(instance as unknown as WasiInitInstance);
 
   const view = getMemoryDataView();
 
@@ -136,11 +136,11 @@ async function bytesFromBlobish(
   }
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (typeof (data as Blob).arrayBuffer === 'function') {
-    return new Uint8Array(await (data as Blob).arrayBuffer());
+  if (typeof (data).arrayBuffer === 'function') {
+    return new Uint8Array(await (data).arrayBuffer());
   }
   // jsdom Blob sans arrayBuffer
-  return new TextEncoder().encode(await (data as Blob).text());
+  return new TextEncoder().encode(await (data).text());
 }
 
 async function addFileToFs(
@@ -213,7 +213,7 @@ async function convertInternal(
   let warnings: unknown[] = [];
   if (rawWarnings) {
     try {
-      warnings = JSON.parse(rawWarnings);
+      warnings = JSON.parse(rawWarnings) as unknown[];
     } catch {
       warnings = [];
     }

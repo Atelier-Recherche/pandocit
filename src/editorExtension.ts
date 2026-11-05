@@ -94,7 +94,7 @@ export function editorTooltipHandler(manager: TooltipManager) {
 
 function findInlineFootnoteTextSibling(el: HTMLElement): HTMLElement | null {
   const isFootnoteText = (node: Element | null): node is HTMLElement =>
-    node instanceof HTMLElement &&
+    !!node?.instanceOf(HTMLElement) &&
     node.classList.contains('cm-inline-footnote') &&
     !node.classList.contains('cm-inline-footnote-start') &&
     !node.classList.contains('cm-inline-footnote-end');
@@ -188,7 +188,7 @@ class CiteWidget extends WidgetType {
           span.addEventListener('click', (evt) => {
             const newPane = Keymap.isModEvent(evt);
             window.setTimeout(() => {
-              this.app.workspace.openLinkText(
+              void this.app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,
                 newPane
@@ -249,7 +249,9 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
         update.transactions.some((tr) =>
           tr.effects.some(
             (e) =>
-              e.is(setCiteKeyCache) || e.value?.field === editorLivePreviewField
+              e.is(setCiteKeyCache) ||
+                (e.value as { field?: unknown } | null | undefined)?.field ===
+                  editorLivePreviewField
           )
         ) ||
         (update.view.state.field(editorLivePreviewField) &&

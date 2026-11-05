@@ -10,7 +10,11 @@ export function ensureMapGetOrInsertComputed(): void {
     ) => unknown;
   };
   if (typeof proto.getOrInsertComputed === 'function') return;
-  proto.getOrInsertComputed = function getOrInsertComputed(key, callback) {
+  proto.getOrInsertComputed = function getOrInsertComputed(
+    this: Map<unknown, unknown>,
+    key: unknown,
+    callback: (key: unknown) => unknown
+  ) {
     if (this.has(key)) {
       return this.get(key);
     }

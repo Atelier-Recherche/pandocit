@@ -70,21 +70,61 @@ function setReaderDarkBg(
   el.toggleClass('pwc-reader-dark-bg', dark);
 }
 
-function ensureShadowThemeStyle(
-  root: ShadowRoot,
+const adoptedThemeSheets = new WeakMap<Document | ShadowRoot, CSSStyleSheet>();
+
+/**
+ * Feuille de thème dans un Shadow DOM ou un document iframe (hors de portée de
+ * styles.css). Feuilles construites quand le moteur les gère, sinon `<style>`
+ * (WebKit < 16.4).
+ */
+function setInjectedThemeCss(
+  target: Document | ShadowRoot,
+  styleId: string,
   css: string | null
 ): void {
-  let style = root.getElementById(
-    SHADOW_DARK_STYLE_ID
-  ) as HTMLStyleElement | null;
+  const doc =
+    target.nodeType === Node.DOCUMENT_NODE
+      ? (target as Document)
+      : target.ownerDocument;
+  const SheetCtor = doc?.defaultView?.CSSStyleSheet;
+  const canAdopt =
+    !!SheetCtor &&
+    'adoptedStyleSheets' in target &&
+    'replaceSync' in SheetCtor.prototype;
+
+  if (canAdopt) {
+    let sheet = adoptedThemeSheets.get(target);
+    if (!css) {
+      if (sheet) {
+        target.adoptedStyleSheets = target.adoptedStyleSheets.filter(
+          (s) => s !== sheet
+        );
+        adoptedThemeSheets.delete(target);
+      }
+      return;
+    }
+    if (!sheet) {
+      sheet = new SheetCtor();
+      adoptedThemeSheets.set(target, sheet);
+      target.adoptedStyleSheets = [...target.adoptedStyleSheets, sheet];
+    }
+    sheet.replaceSync(css);
+    return;
+  }
+
+  let style = target.getElementById(styleId) as HTMLStyleElement | null;
   if (!css) {
     style?.remove();
     return;
   }
   if (!style) {
-    style = root.ownerDocument.createElement('style');
-    style.id = SHADOW_DARK_STYLE_ID;
-    root.appendChild(style);
+    style = doc.createElement('style');
+    style.id = styleId;
+    const parent =
+      target.nodeType === Node.DOCUMENT_NODE
+        ? (doc.head ?? doc.documentElement)
+        : target;
+    parent.appendChild(style);
   }
   style.textContent = css;
 }
@@ -219,7 +259,7 @@ iframe { filter: ${canInvertIframe ? READER_DARK_FILTER : 'none'}; }
 svg { filter: ${!canInvertIframe ? READER_DARK_FILTER : 'none'}; }
 `
       : null;
-    ensureShadowThemeStyle(root, shadowCss);
+    setInjectedThemeCss(root, SHADOW_DARK_STYLE_ID, shadowCss);
 
     root.querySelectorAll('iframe').forEach((el) => {
       (el as HTMLElement).toggleClass(
@@ -229,11 +269,11 @@ svg { filter: ${!canInvertIframe ? READER_DARK_FILTER : 'none'}; }
     });
 
     setReaderDarkBg(
-      root.getElementById('container') as HTMLElement | null,
+      root.getElementById('container'),
       dark && !canInvertIframe
     );
     setReaderDarkBg(
-      root.getElementById('top') as HTMLElement | null,
+      root.getElementById('top'),
       dark && !canInvertIframe
     );
   }
@@ -241,14 +281,7 @@ svg { filter: ${!canInvertIframe ? READER_DARK_FILTER : 'none'}; }
   const contents = renderer?.getContents?.() ?? [];
   for (const { doc } of contents) {
     if (!doc?.documentElement) continue;
-    const head = doc.head ?? doc.documentElement;
-    let style = doc.getElementById('pwc-epub-theme') as HTMLStyleElement | null;
-    if (!style) {
-      style = doc.createElement('style');
-      style.id = 'pwc-epub-theme';
-      head.appendChild(style);
-    }
-    style.textContent = css;
+    setInjectedThemeCss(doc, 'pwc-epub-theme', css);
   }
 
   window.requestAnimationFrame(() => {

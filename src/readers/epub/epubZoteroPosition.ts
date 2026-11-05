@@ -18,6 +18,9 @@ import { findRangeForText } from './epubTextRange';
 
 type FoliateViewEl = HTMLElement & {
   renderer?: { getContents?: () => Array<{ index: number; doc: Document }> };
+  lastLocation?: {
+    pageItem?: { label?: string } | null;
+  } | null;
 };
 
 /** Index de section foliate à partir du préfixe spine `/6/NN`. */
@@ -67,21 +70,14 @@ export async function resolveZoteroEpubPosition(
   plugin: ReferenceList,
   file: TFile,
   selection: EpubPendingSelection,
-  _foliateEl: FoliateViewEl | null
+  foliateEl: FoliateViewEl | null
 ): Promise<{
   zoteroCfi: string;
   zoteroSortIndex: string;
   pageLabel: string;
 } | null> {
   try {
-    const bytes = await plugin.app.vault.readBinary(file);
-    const buf =
-      bytes instanceof ArrayBuffer
-        ? bytes
-        : bytes.buffer.slice(
-            bytes.byteOffset,
-            bytes.byteOffset + bytes.byteLength
-          );
+    const buf = await plugin.app.vault.readBinary(file);
 
     const spine = parseEpubSpine(buf);
     const section = spine?.[selection.sectionIndex];
@@ -130,8 +126,12 @@ export async function resolveZoteroEpubPosition(
       selection.sectionIndex,
       offset
     );
-    // Sans page-list physique : libellé 1-based de la section (comme Zotero mobile).
-    const pageLabel = String(selection.sectionIndex + 1);
+    const paperLabel = foliateEl?.lastLocation?.pageItem?.label?.trim();
+    // Page papier (page-list) si dispo ; sinon section 1-based (comme Zotero mobile).
+    const pageLabel =
+      paperLabel && paperLabel.length > 0
+        ? paperLabel
+        : String(selection.sectionIndex + 1);
 
     return {
       zoteroCfi: lengthenEpubCfi(zoteroCfi),

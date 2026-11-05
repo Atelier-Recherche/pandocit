@@ -78,7 +78,7 @@ export function resolveAttachmentLinks(
   att: StoredZoteroItem,
   zoteroUri: string | null
 ): ResolvedAttachmentLink[] {
-  const d = att.data as Record<string, unknown>;
+  const d = att.data;
   const out: ResolvedAttachmentLink[] = [];
 
   if (zoteroUri) {

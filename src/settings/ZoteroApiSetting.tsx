@@ -115,7 +115,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
       libType === 'user'
         ? parseMergeGroupLabelsFromText(mergeGroupLabelsText)
         : {};
-    plugin.saveSettings();
+    void plugin.saveSettings();
   }, [
     apiKey,
     libType,
@@ -149,7 +149,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
     const cache = { ...(plugin.settings.zoteroApiGroupNamesCache ?? {}) };
     for (const g of list) cache[String(g.id)] = g.name;
     plugin.settings.zoteroApiGroupNamesCache = cache;
-    plugin.saveSettings();
+    void plugin.saveSettings();
     if (list.length === 0) {
       new Notice(t('No group libraries found'));
     } else {
@@ -163,7 +163,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
     noticeSyncResult(r, t);
     await plugin.bibManager.loadGlobalZoteroApi();
     plugin.bibManager.fileCache.clear();
-    plugin.processReferences();
+    void plugin.processReferences();
   }, [persistApi, plugin]);
 
   const exportBib = React.useCallback(async () => {
@@ -199,7 +199,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
               setEnabled((cur) => {
                 const next = !cur;
                 plugin.settings.pullFromZoteroApi = next;
-                plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                void plugin.saveSettings(() => void plugin.bibManager.reinit(true));
                 return next;
               });
             }}
@@ -237,7 +237,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                   setApiKey(e.target.value);
                   plugin.settings.zoteroApiKey =
                     e.target.value.trim() || undefined;
-                  plugin.saveSettings();
+                  void plugin.saveSettings();
                 }}
               />
             </SettingItem>
@@ -254,7 +254,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                   const v = e.target.value as 'user' | 'group';
                   setLibType(v);
                   plugin.settings.zoteroApiLibraryType = v;
-                  plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                  void plugin.saveSettings(() => void plugin.bibManager.reinit(true));
                 }}
               >
                 <option value="user">{t('My library')}</option>
@@ -281,7 +281,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                       plugin.settings.zoteroApiGroupId = Number.isFinite(n)
                         ? n
                         : undefined;
-                      plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                      void plugin.saveSettings(() => void plugin.bibManager.reinit(true));
                     }}
                   />
                   <datalist id="pwc-zotero-group-pick">
@@ -331,7 +331,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                     setMergeGroupsText(v);
                     plugin.settings.zoteroApiMergeGroupIds =
                       parseMergeGroupIdsFromText(v);
-                    plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                    void plugin.saveSettings(() => void plugin.bibManager.reinit(true));
                   }}
                 />
               </SettingItem>
@@ -357,7 +357,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                     setMergeGroupLabelsText(v);
                     plugin.settings.zoteroApiMergeGroupLabels =
                       parseMergeGroupLabelsFromText(v);
-                    plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                    void plugin.saveSettings(() => void plugin.bibManager.reinit(true));
                   }}
                 />
               </SettingItem>
@@ -423,7 +423,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
                   const v = e.target.value;
                   setBibPath(v);
                   plugin.settings.zoteroApiBibExportPath = v.trim() || undefined;
-                  plugin.saveSettings();
+                  void plugin.saveSettings();
                 }}
               />
               <button
@@ -440,7 +440,7 @@ export function ZoteroApiSetting({ plugin }: { plugin: ReferenceList }) {
           <div className="pwc-setting-item setting-item pwc-setting-item-wrapper pwc-vault-pdf-import-settings">
             <SettingItem
               name={t('Vault PDF import settings')}
-              desc={t('Vault folder import desc')}
+              description={t('Vault folder import desc')}
             >
               <div className="pwc-vault-pdf-import-settings__fields">
                 <div className="pwc-vault-pdf-import-settings__field">

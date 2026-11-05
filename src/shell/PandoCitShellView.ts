@@ -51,7 +51,7 @@ export class PandoCitShellView extends ItemView {
     }
 
     this.refsPanel = new ReferenceListPanel(
-      this.panelHosts.get('references')!,
+      this.panelHosts.get('references'),
       plugin
     );
     this.buildTabs();
@@ -128,7 +128,7 @@ export class PandoCitShellView extends ItemView {
       const hasLibrary =
         !!this.plugin.settings.pullFromZoteroApi ||
         !!this.plugin.settings.pathToBibliography?.trim();
-      const host = this.panelHosts.get('zotero')!;
+      const host = this.panelHosts.get('zotero');
       if (!hasLibrary) {
         host.empty();
         host.createDiv({
@@ -143,7 +143,7 @@ export class PandoCitShellView extends ItemView {
     }
     if (tab === 'document-annotations' && !this.docPanel) {
       this.docPanel = new DocumentAnnotationsPanel(
-        this.panelHosts.get('document-annotations')!,
+        this.panelHosts.get('document-annotations'),
         this.plugin
       );
     }

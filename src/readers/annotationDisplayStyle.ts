@@ -9,7 +9,8 @@ export type AnnotationDisplayStyle = PdfHighlightStyle | 'dotted';
 
 export interface AnnotationDisplayInput {
   color?: string;
-  markupStyle?: PdfHighlightStyle | string;
+  /** {@link PdfHighlightStyle} ou valeur Zotero inconnue. */
+  markupStyle?: string;
   opacity?: number;
   restyleEnabled: boolean;
   readerDarkMode: boolean;

@@ -2,7 +2,7 @@
 
 <table>
 <tr>
-<td><img src="readme-media/logo_pandocite.png" alt="PandoCit" width="140" /></td>
+<td><img src="readme-media/logo_pandocit.png" alt="PandoCit" width="140" /></td>
 <td align="left">
 <h1 style="margin:0">PandoCit</h1>
 <p style="margin:0.25em 0 0"><strong>Citations Pandoc dans Obsidian</strong><br/>panneau latéral · bibliographie WASM · intégration Zotero</p>
@@ -202,9 +202,22 @@ Les contrôles automatisés peuvent signaler des accès qui restent **nécessair
 | Accès filesystem (`fs`) | Pièces jointes Zotero liées, bibliographies / cache CSL hors coffre, Better BibTeX en local |
 | Presse-papiers | Copie de citations et de références d’annotations |
 | Énumération du coffre | Résolution de PDF/EPUB et chemins flous |
-| Modules Node (`http` / `crypto` / …) | Uniquement derrière `Platform.isDesktop` (BBT localhost, hash upload Zotero) |
+| Modules Node (`fs` / `path` / `crypto`) et `electron` | Uniquement derrière `Platform.isDesktop` (fichiers hors coffre, hash MD5 d’upload Zotero, sélecteur de fichier, presse-papiers HTML) |
 
 Le plugin vise aussi mobile pour la lecture / sync API ; les chemins Node restent gardés bureau.
+
+### Accès réseau
+
+Les requêtes du plugin passent par `requestUrl` d’Obsidian ; seul pdf.js charge lui-même ses ressources depuis unpkg. Aucune télémétrie, aucune publicité.
+
+| Service | Quand |
+| --- | --- |
+| `127.0.0.1:23119` (Better BibTeX, local) | Si la source bibliographique Zotero / Better BibTeX est activée |
+| `api.zotero.org` | Si une clé API Zotero est configurée (lecture / écriture de la bibliothèque, pièces jointes) |
+| `raw.githubusercontent.com` (styles et locales CSL) | Au premier usage d’un style ou d’une langue de citation non mis en cache |
+| `github.com` (pandoc.wasm, lecteur EPUB) | Uniquement sur clic d’installation dans les réglages |
+| `unpkg.com` (pdf.js : polices standard, WASM, profils ICC) | À l’ouverture d’un PDF dans le lecteur intégré (le worker est embarqué ; téléchargement séparé seulement sur clic) |
+| `hypothes.is` | Uniquement si l’import Hypothesis est utilisé |
 
 ## 🔗 Ressources
 

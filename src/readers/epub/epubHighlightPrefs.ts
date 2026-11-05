@@ -1,4 +1,5 @@
 import { t } from '../../lang/helpers';
+import type { TranslationKey } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 
 import type {
@@ -95,7 +96,7 @@ export async function saveEpubHighlightPrefs(
 
 
 
-export function epubTargetLabel(target: PdfHighlightTarget): string {
+export function epubTargetLabel(target: PdfHighlightTarget): TranslationKey {
 
   switch (target) {
 
@@ -117,7 +118,7 @@ export function epubTargetLabel(target: PdfHighlightTarget): string {
 
 
 
-export function epubStyleLabel(style: PdfHighlightStyle): string {
+export function epubStyleLabel(style: PdfHighlightStyle): TranslationKey {
 
   switch (style) {
 

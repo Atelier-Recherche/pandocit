@@ -90,7 +90,7 @@ export class ZoteroApiClient {
       }
     }
 
-    const lastModifiedVersion = readLastModifiedVersion(outHeaders as any);
+    const lastModifiedVersion = readLastModifiedVersion(outHeaders);
 
     return {
       status: res.status,
@@ -316,8 +316,8 @@ export interface ZoteroApiItemEnvelope {
 export function parseItemArray(body: string): ZoteroApiItemEnvelope[] {
   try {
     const j = JSON.parse(body) as unknown;
-    if (Array.isArray(j)) return j;
-    if (j && typeof j === 'object' && 'key' in (j as object)) {
+    if (Array.isArray(j)) return j as ZoteroApiItemEnvelope[];
+    if (j && typeof j === 'object' && 'key' in (j)) {
       return [j as ZoteroApiItemEnvelope];
     }
     return [];

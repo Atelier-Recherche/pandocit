@@ -1,6 +1,8 @@
 import type { Plugin } from 'obsidian';
 import type { DocumentInitParameters } from 'pdfjs-dist/types/src/display/api';
 
+import { PDFJS_DIST_VERSION } from '../../pdfWorkerInstall';
+
 function getResourcePath(plugin: Plugin, relativePath: string): string | null {
   const adapter = plugin.app.vault.adapter as {
     getResourcePath?: (p: string) => string;
@@ -33,10 +35,10 @@ export function pdfAssetsBaseUrl(plugin: Plugin): string | null {
 /** Init options for pdf.js `getDocument` (WASM, fonts, ICC). */
 export function pdfGetDocumentInit(
   plugin: Plugin,
-  bytes: ArrayBuffer
+  bytes: ArrayBuffer | Uint8Array
 ): DocumentInitParameters {
   const data = new Uint8Array(bytes.slice(0));
-  const cdnBase = 'https://unpkg.com/pdfjs-dist@5.7.284/';
+  const cdnBase = `https://unpkg.com/pdfjs-dist@${PDFJS_DIST_VERSION}/`;
   const localBase = pdfAssetsBaseUrl(plugin);
   if (!localBase) {
     console.warn(
@@ -49,7 +51,6 @@ export function pdfGetDocumentInit(
     useSystemFonts: true,
     useWasm: true,
     useWorkerFetch: true,
-    enableScripting: false,
     wasmUrl: appendToResourceUrl(assetBase, 'wasm/'),
     standardFontDataUrl: appendToResourceUrl(assetBase, 'standard_fonts/'),
     iccUrl: appendToResourceUrl(assetBase, 'iccs/'),

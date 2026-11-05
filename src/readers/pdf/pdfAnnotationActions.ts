@@ -1,6 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 
 import type { DocumentAnnotation } from '../../annotations/types';
+import { toArrayBuffer } from '../../helpers';
 import { t } from '../../lang/helpers';
 import type ReferenceList from '../../main';
 import {
@@ -86,7 +87,7 @@ export async function deleteDocumentAnnotation(
       new Notice(t('Delete failed'));
       return;
     }
-    await plugin.app.vault.modifyBinary(file, out);
+    await plugin.app.vault.modifyBinary(file, toArrayBuffer(out));
     await refreshPdfUi(plugin, file);
     new Notice('Annotation supprimée');
   }
@@ -116,7 +117,7 @@ export async function convertAnnotationTarget(
   if (target === 'pdf') {
     const bytes = await plugin.app.vault.readBinary(file);
     const out = await embedHighlightsInPdf(new Uint8Array(bytes), [h]);
-    await plugin.app.vault.modifyBinary(file, out);
+    await plugin.app.vault.modifyBinary(file, toArrayBuffer(out));
   } else {
     const attachmentKey = await findZoteroAttachmentKeyForVaultFile(plugin, file);
     if (!attachmentKey) {

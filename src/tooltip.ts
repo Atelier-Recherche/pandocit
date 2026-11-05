@@ -1,3 +1,4 @@
+import type { DOMEventHandlers } from '@codemirror/view';
 import { TFile, setIcon } from 'obsidian';
 
 import { citationInfoUsesTap } from './helpers';
@@ -129,7 +130,7 @@ export class TooltipManager {
       content.append(...html);
     } else {
       for (const key of keys) {
-        const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement;
+        const html = this.plugin.bibManager.getBibForCiteKey(file, key);
 
         if (html) {
           if (!content) content = createFragment();
@@ -292,7 +293,7 @@ export class TooltipManager {
     }
   }
 
-  boundScroll: () => void;
+  boundScroll: ((evt: Event) => void) | null;
 
   hideTooltip() {
     this.isHoveringTooltip = false;
@@ -305,7 +306,11 @@ export class TooltipManager {
     }
     this.outsideDismiss = null;
     this.pinnedCiteEl = null;
-    this.tooltip?.win.removeEventListener('scroll', this.boundScroll);
+    if (this.boundScroll) {
+      this.tooltip?.win.removeEventListener('scroll', this.boundScroll, {
+        capture: true,
+      });
+    }
     this.tooltip?.remove();
     this.tooltip = null;
     this.boundScroll = null;
@@ -402,7 +407,7 @@ export class TooltipManager {
     this.bindCitationInteraction(el);
   }
 
-  getEditorTooltipHandler() {
+  getEditorTooltipHandler(): DOMEventHandlers<unknown> {
     const useTap = citationInfoUsesTap();
     let dbOverTimer = 0;
     let dbOutTimer = 0;
@@ -472,6 +477,6 @@ export class TooltipManager {
           }, 150);
         }
       },
-    } as Record<string, ((evt: any) => boolean | void) | undefined>;
+    };
   }
 }

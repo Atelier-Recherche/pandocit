@@ -25,6 +25,7 @@ import {
   isPdfWorkerInstalled,
 } from './pdfWorkerInstall';
 import { setPluginUiLocale } from './lang/helpers';
+import { showOpenFileDialog } from './platformAdapter';
 import {
   isFormattedCitationsEnabled,
   setFormattedCitationsEnabled,
@@ -239,9 +240,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .onChange((value) => {
               const prev = this.plugin.settings.pathToBibliography;
               this.plugin.settings.pathToBibliography = value;
-              this.plugin.saveSettings(() => {
+              void this.plugin.saveSettings(() => {
                 this.plugin.bibManager.clearWatcher(prev);
-                this.plugin.bibManager.reinit(true);
+                void this.plugin.bibManager.reinit(true);
               });
             });
         });
@@ -259,19 +260,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               return;
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
-            const path = require('electron').remote.dialog.showOpenDialogSync(
-              {
-                properties: ['openFile'],
-              }
-            );
+            const path = showOpenFileDialog();
 
             if (path && path.length) {
               input.setValue(path[0]);
 
               this.plugin.settings.pathToBibliography = path[0];
-              this.plugin.saveSettings(() =>
-                this.plugin.bibManager.reinit(true)
+              void this.plugin.saveSettings(
+                () => void this.plugin.bibManager.reinit(true)
               );
             }
           });
@@ -298,8 +294,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           search={searchCSL}
           onSelect={(selection) => {
             this.plugin.settings.cslStyleURL = selection?.value;
-            this.plugin.saveSettings(() =>
-              this.plugin.bibManager.reinit(false)
+            void this.plugin.saveSettings(
+              () => void this.plugin.bibManager.reinit(false)
             );
           }}
         />
@@ -320,8 +316,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           input = text;
           text.setValue(this.plugin.settings.cslStylePath).onChange((value) => {
             this.plugin.settings.cslStylePath = value;
-            this.plugin.saveSettings(() =>
-              this.plugin.bibManager.reinit(false)
+            void this.plugin.saveSettings(
+              () => void this.plugin.bibManager.reinit(false)
             );
           });
         });
@@ -339,19 +335,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               return;
             }
 
-            // eslint-disable-next-line @typescript-eslint/no-var-requires -- Electron n'est disponible qu'au runtime desktop, chargement dynamique nécessaire
-            const path = require('electron').remote.dialog.showOpenDialogSync(
-              {
-                properties: ['openFile'],
-              }
-            );
+            const path = showOpenFileDialog();
 
             if (path && path.length) {
               input.setValue(path[0]);
 
               this.plugin.settings.cslStylePath = path[0];
-              this.plugin.saveSettings(() =>
-                this.plugin.bibManager.reinit(false)
+              void this.plugin.saveSettings(
+                () => void this.plugin.bibManager.reinit(false)
               );
             }
           });
@@ -388,8 +379,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           emptyNoMatch={t('No matching languages')}
           onSelect={(selection) => {
             this.plugin.settings.cslLang = selection?.value ?? '';
-            this.plugin.saveSettings(() =>
-              this.plugin.bibManager.reinit(false)
+            void this.plugin.saveSettings(
+              () => void this.plugin.bibManager.reinit(false)
             );
           }}
         />
@@ -403,7 +394,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .addToggle((text) =>
         text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
           this.plugin.settings.hideLinks = value;
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         })
       );
 
@@ -415,7 +406,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.underlineCitekeys)
           .onChange((value) => {
             this.plugin.settings.underlineCitekeys = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -431,7 +422,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(isFormattedCitationsEnabled(this.plugin.settings))
           .onChange((value) => {
             setFormattedCitationsEnabled(this.plugin.settings, value);
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
       });
 
@@ -447,7 +438,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.renderLinkCitations)
           .onChange((value) => {
             this.plugin.settings.renderLinkCitations = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -463,7 +454,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.enableCiteKeyCompletion)
           .onChange((value) => {
             this.plugin.settings.enableCiteKeyCompletion = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -479,7 +470,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.openPdfLinksInNewTab !== false)
           .onChange((value) => {
             this.plugin.settings.openPdfLinksInNewTab = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -490,7 +481,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.annotationRestyleEnabled !== false)
           .onChange((value) => {
             this.plugin.settings.annotationRestyleEnabled = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -505,7 +496,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .onChange((v) => {
             this.plugin.settings.annotationRestyleBlackColor =
               v.trim() || '#ffd400';
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -521,7 +512,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               | 'underline'
               | 'squiggly'
               | 'dotted';
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
       });
 
@@ -532,7 +523,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.readerDarkMode)
           .onChange((value) => {
             this.plugin.settings.readerDarkMode = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -544,7 +535,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.hypothesisApiToken ?? '')
           .onChange((v) => {
             this.plugin.settings.hypothesisApiToken = v;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -555,7 +546,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.hypothesisGroup ?? 'public')
           .onChange((v) => {
             this.plugin.settings.hypothesisGroup = v;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
   }

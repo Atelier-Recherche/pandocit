@@ -4,10 +4,9 @@ import { t } from '../lang/helpers';
 import type ReferenceList from '../main';
 import type { VaultPdfImportSettings } from '../settings';
 import {
-  EXAMPLE_EXCLUDE_FOLDER_GLOBS,
   EXAMPLE_EXCLUDE_PATH_REGEX,
   METADATA_REGEX_EXAMPLES,
-  mergeLinesIntoTextarea,
+  exampleExcludeFolderGlobs,
 } from './filterExamples';
 import { describeActiveImportFilters } from './filterPreview';
 
@@ -112,11 +111,12 @@ export function appendFilterExamples(
     });
   }
 
+  const exampleGlobs = exampleExcludeFolderGlobs(plugin.app.vault.configDir);
   addExampleBlock(
     body,
     t('Exclude folder globs'),
     t('Filter examples globs intro'),
-    EXAMPLE_EXCLUDE_FOLDER_GLOBS.join('\n'),
+    exampleGlobs.join('\n'),
     allowInsert ? t('Insert example globs') : null,
     allowInsert
       ? () => {
@@ -125,7 +125,7 @@ export function appendFilterExamples(
           plugin.settings.vaultPdfImport = {
             ...plugin.settings.vaultPdfImport,
             excludeFolderGlobs: [
-              ...new Set([...current, ...EXAMPLE_EXCLUDE_FOLDER_GLOBS]),
+              ...new Set([...current, ...exampleGlobs]),
             ],
           };
           void plugin.saveSettings();
@@ -182,9 +182,4 @@ export function appendFilterExamples(
         : null
     );
   }
-}
-
-/** Met à jour une textarea « une ligne par motif » via fusion de lignes. */
-export function insertGlobsIntoTextareaValue(current: string): string {
-  return mergeLinesIntoTextarea(current, EXAMPLE_EXCLUDE_FOLDER_GLOBS);
 }

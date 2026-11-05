@@ -5,6 +5,7 @@ import {
   Events,
   MarkdownView,
   Menu,
+  MenuItem,
   Notice,
   Plugin,
   WorkspaceLeaf,
@@ -30,7 +31,7 @@ import { viewType as legacyRefViewType } from './view';
 import { zoteroLibraryViewType } from './zoteroLibraryView';
 import { ZoteroSyncService, noticeSyncResult } from './zoteroApi/zoteroSync';
 import { writeBibtexExportToVault } from './zoteroApi/zoteroToBibtex';
-import { PromiseCapability, getVaultRoot } from './helpers';
+import { PromiseCapability, getVaultRoot, toArrayBuffer } from './helpers';
 import { getPath } from './platformAdapter';
 import { BibManager } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
@@ -81,10 +82,7 @@ export default class ReferenceList extends Plugin {
       const data = await this.app.vault.adapter.readBinary(p);
       return data instanceof ArrayBuffer
         ? data
-        : (data as Uint8Array).buffer.slice(
-            (data as Uint8Array).byteOffset,
-            (data as Uint8Array).byteOffset + (data as Uint8Array).byteLength
-          );
+        : toArrayBuffer(new Uint8Array(data));
     });
 
     this.registerView(
@@ -108,7 +106,7 @@ export default class ReferenceList extends Plugin {
     this.cacheDir = getPath().join(getVaultRoot(this.app), '.pandoc');
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
-    this.initPromise.promise
+    void this.initPromise.promise
       .then(async () => {
         if (this.settings.pullFromZoteroApi) {
           await this.bibManager.loadGlobalZoteroApi();
@@ -240,7 +238,7 @@ export default class ReferenceList extends Plugin {
         const r = await this.zoteroSync.sync();
         noticeSyncResult(r, t);
         await this.zoteroAnnotationIndex.refresh(this);
-        this.bibManager.reinit(true);
+        void this.bibManager.reinit(true);
         await this.bibManager.initPromise.promise;
         void this.processReferences();
         await this.shell?.zoteroPanel?.refreshList();
@@ -327,7 +325,7 @@ export default class ReferenceList extends Plugin {
       )
     );
 
-    (async () => {
+    void (async () => {
       this.initStatusBar();
       this.setStatusBarLoading();
 
@@ -378,7 +376,7 @@ export default class ReferenceList extends Plugin {
     this.pendingShellTab = tab;
     const existing = this.shell;
     if (existing) {
-      this.app.workspace.revealLeaf(existing.leaf);
+      void this.app.workspace.revealLeaf(existing.leaf);
       existing.switchTab(tab);
       this.pendingShellTab = undefined;
       if (tab === 'references') void this.processReferences();
@@ -399,7 +397,7 @@ export default class ReferenceList extends Plugin {
 
   revealShell(): void {
     const leaves = this.app.workspace.getLeavesOfType(shellViewType);
-    if (leaves.length) this.app.workspace.revealLeaf(leaves[0]);
+    if (leaves.length) void this.app.workspace.revealLeaf(leaves[0]);
   }
 
   statusBarIcon: HTMLElement;
@@ -413,9 +411,9 @@ export default class ReferenceList extends Plugin {
     ico.addEventListener('click', () => {
       if (isOpen) return;
       const { settings } = this;
-      const menu = (new Menu() as any)
+      const menu = new Menu()
         .addSections(['settings', 'actions'])
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('settings')
             .setIcon('lucide-underline')
@@ -423,10 +421,10 @@ export default class ReferenceList extends Plugin {
             .setChecked(!!settings.underlineCitekeys)
             .onClick(() => {
               this.settings.underlineCitekeys = !settings.underlineCitekeys;
-              this.saveSettings();
+              void this.saveSettings();
             })
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('settings')
             .setIcon('lucide-text')
@@ -437,10 +435,10 @@ export default class ReferenceList extends Plugin {
                 this.settings,
                 !isFormattedCitationsEnabled(settings)
               );
-              this.saveSettings();
+              void this.saveSettings();
             })
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('settings')
             .setIcon('lucide-at-sign')
@@ -449,54 +447,29 @@ export default class ReferenceList extends Plugin {
             .onClick(() => {
               this.settings.enableCiteKeyCompletion =
                 !settings.enableCiteKeyCompletion;
-              this.saveSettings();
+              void this.saveSettings();
             })
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('actions')
             .setIcon('lucide-plus')
             .setTitle(t('Insert citation…'))
             .onClick(() => void openCitekeyPickerModal(this))
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('actions')
             .setIcon('lucide-layout-panel-left')
             .setTitle(t('Show PandoCit panel'))
             .onClick(() => void this.initShell('references'))
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('actions')
             .setIcon('lucide-rotate-cw')
             .setTitle(t('Refresh bibliography'))
-            .onClick(async () => {
-              const activeView =
-                this.app.workspace.getActiveViewOfType(MarkdownView);
-              if (activeView) {
-                const file = activeView.file;
-
-                if (this.bibManager.fileCache.has(file)) {
-                  const cache = this.bibManager.fileCache.get(file);
-                  if (cache.source !== this.bibManager) {
-                    this.bibManager.fileCache.delete(file);
-                    void this.processReferences();
-                    return;
-                  }
-                }
-              }
-
-              if (this.settings.pullFromZoteroApi) {
-                const r = await this.zoteroSync.sync();
-                noticeSyncResult(r, t);
-                await this.zoteroAnnotationIndex.refresh(this);
-              }
-
-              this.bibManager.reinit(true);
-              await this.bibManager.initPromise.promise;
-              void this.processReferences();
-            })
+            .onClick(() => void this.refreshBibliographyFromMenu())
         );
 
       const rect = ico.getBoundingClientRect();
@@ -514,6 +487,32 @@ export default class ReferenceList extends Plugin {
     });
   }
 
+  private async refreshBibliographyFromMenu(): Promise<void> {
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView) {
+      const file = activeView.file;
+
+      if (this.bibManager.fileCache.has(file)) {
+        const cache = this.bibManager.fileCache.get(file);
+        if (cache.source !== this.bibManager) {
+          this.bibManager.fileCache.delete(file);
+          void this.processReferences();
+          return;
+        }
+      }
+    }
+
+    if (this.settings.pullFromZoteroApi) {
+      const r = await this.zoteroSync.sync();
+      noticeSyncResult(r, t);
+      await this.zoteroAnnotationIndex.refresh(this);
+    }
+
+    void this.bibManager.reinit(true);
+    await this.bibManager.initPromise.promise;
+    void this.processReferences();
+  }
+
   setStatusBarLoading() {
     this.statusBarIcon.addClass('is-loading');
     setIcon(this.statusBarIcon, 'lucide-loader');
@@ -525,7 +524,7 @@ export default class ReferenceList extends Plugin {
   }
 
   async loadSettings() {
-    const loaded = await this.loadData();
+    const loaded: unknown = await this.loadData();
     const safeLoaded =
       loaded && typeof loaded === 'object'
         ? (loaded as Record<string, unknown>)

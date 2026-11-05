@@ -5,7 +5,7 @@ import { t } from './lang/helpers';
 import { getPluginFolder } from './pandocWasmInstall';
 
 /** Aligné sur `pdfjs-dist` dans package.json. */
-export const PDFJS_DIST_VERSION = '5.7.284';
+export const PDFJS_DIST_VERSION = '6.4.299';
 
 export const PDF_WORKER_DOWNLOAD_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_DIST_VERSION}/legacy/build/pdf.worker.min.mjs`;
 

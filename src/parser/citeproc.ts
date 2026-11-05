@@ -1,3 +1,4 @@
+import type { CiteprocEngine } from 'citeproc';
 import { Citation, CitationGroup, RenderedCitation } from './parser';
 
 export type CiteMode = 'suppress-author' | 'composite' | 'author-only';
@@ -157,7 +158,7 @@ function sanitize(val: string) {
   return decodeHtml(val.replace(/\[NO_PRINTED_FORM\] */g, ''));
 }
 
-export function cite(engine: any, group: CitationGroup[]) {
+export function cite(engine: CiteprocEngine, group: CitationGroup[]) {
   const { output, idToGroup } = getCiteprocCites(group, engine.opt.xclass);
 
   const makeCites: CiteprocCite[] = [];
