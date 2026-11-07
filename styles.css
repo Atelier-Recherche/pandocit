@@ -130,13 +130,15 @@ body {
 }
 
 .csl-entry {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--pwc-font-size);
   word-wrap: break-word;
   gap: var(--size-4-2);
 }
 
-/* Évite :has() (perf / lint Obsidian) — flex quand le wrapper a des boutons. */
-.csl-entry-wrapper .csl-entry {
+/* Mise en page « numéro | texte » de citeproc uniquement (pas tout le contenu). */
+.csl-entry.is-csl-aligned {
   display: flex;
 }
 
@@ -147,6 +149,8 @@ body {
 .pwc-entry-btns {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
   gap: var(--size-4-1);
 }
 

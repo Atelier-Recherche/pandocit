@@ -1090,6 +1090,11 @@ export class BibManager {
     }
 
     parsed?.findAll('.csl-entry').forEach((e) => {
+      // citeproc : `.csl-left-margin` + `.csl-right-inline` → colonnes ; sinon bloc à la ligne.
+      if (e.find('.csl-left-margin') || e.find('.csl-right-inline')) {
+        e.addClass('is-csl-aligned');
+      }
+
       if (!inTooltip) {
         e.setAttribute('aria-label', t('Click to copy'));
         e.onClickEvent(() => copyElToClipboard(e));
