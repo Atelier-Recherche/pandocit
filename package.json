@@ -1,6 +1,6 @@
 {
   "name": "pandocit",
-  "version": "2.0.64",
+  "version": "2.0.65",
   "description": "Citations Pandoc, bibliothèque Zotero (API), lecteurs PDF/EPUB et annotations pour Obsidian.",
   "main": "main.js",
   "scripts": {
