@@ -2,7 +2,7 @@
 
 <table>
 <tr>
-<td><img src="https://atelier.atechnologie.fr/wp-content/uploads/2026/09/serre-truc.webp" alt="PandoCit" width="140" /></td>
+<td><img src="readme-media/logo_pandocit.webp" alt="PandoCit" width="140" /></td>
 <td align="left">
 <h1 style="margin:0">PandoCit</h1>
 <p style="margin:0.25em 0 0"><strong>Citas Pandoc en Obsidian</strong><br/>panel lateral · bibliografía WASM · integración Zotero</p>
@@ -10,7 +10,7 @@
 </tr>
 </table>
 
-<a href="https://atelier.atechnologie.fr/" title="l'Atelier – asociación de fabricación de libros y herramientas de investigación"><img src="https://atelier.atechnologie.fr/wp-content/uploads/2026/11/logoasso.webp" alt="l'Atelier" width="200" /></a>  
+<a href="https://atelier.atechnologie.fr/" title="l'Atelier – asociación de fabricación de libros y herramientas de investigación"><img src="https://raw.githubusercontent.com/Atelier-Recherche/.github/main/profile/logo.jpg" alt="l'Atelier" width="200" /></a>  
 <sub>Desarrollado por <a href="https://atelier.atechnologie.fr/">l'Atelier</a> — fabricación de libros y herramientas de investigación (EHESS)</sub>
 
 <p>
